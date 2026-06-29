@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Permite HTTP al servidor de desarrollo durante la fase inicial -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">137.131.230.163</domain>
+    </domain-config>
+</network-security-config>
