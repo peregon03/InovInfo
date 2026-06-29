@@ -27,7 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -150,7 +150,7 @@ fun AdminScreen() {
                     UNIDADES.forEachIndexed { idx, unidad ->
                         UnidadRow(unidad = unidad)
                         if (idx < UNIDADES.lastIndex) {
-                            Divider(
+                            HorizontalDivider(
                                 color     = MaterialTheme.colorScheme.outlineVariant,
                                 thickness = 0.5.dp
                             )

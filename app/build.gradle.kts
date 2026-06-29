@@ -1,9 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
+}
+
+// Lee local.properties de forma segura (nunca va a git)
+val localProps = Properties().also { props ->
+    rootProject.file("local.properties")
+        .takeIf { it.exists() }
+        ?.inputStream()
+        ?.use { props.load(it) }
 }
 
 android {
@@ -18,6 +28,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Expone la key como constante de compilación — nunca hardcodeada en código
+        buildConfigField(
+            "String",
+            "GEMINI_API_KEY",
+            "\"${localProps.getProperty("GEMINI_API_KEY", "")}\""
+        )
     }
 
     buildTypes {
@@ -37,7 +54,8 @@ android {
         jvmTarget = "11"
     }
     buildFeatures {
-        compose = true
+        compose      = true
+        buildConfig  = true   // necesario para BuildConfig.GEMINI_API_KEY
     }
 }
 
