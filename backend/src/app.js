@@ -13,7 +13,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/usuarios',  require('./routes/usuarios'));
 app.use('/api/visitas',   require('./routes/visitas'));
-app.use('/api',           require('./routes/catalogos'));
+app.use('/api/catalogos', require('./routes/catalogos'));
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
