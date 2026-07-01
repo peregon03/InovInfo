@@ -2,6 +2,7 @@ package com.Electroinova.inovinfo.di
 
 import com.Electroinova.inovinfo.data.remote.AuthApiService
 import com.Electroinova.inovinfo.data.remote.GeminiService
+import com.Electroinova.inovinfo.data.remote.InovInfoApiService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -59,4 +60,9 @@ object AppModule {
     @Singleton
     fun provideAuthApiService(@Named("backend") retrofit: Retrofit): AuthApiService =
         retrofit.create(AuthApiService::class.java)
+
+    @Provides
+    @Singleton
+    fun provideInovInfoApiService(@Named("backend") retrofit: Retrofit): InovInfoApiService =
+        retrofit.create(InovInfoApiService::class.java)
 }

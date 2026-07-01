@@ -1,87 +1,54 @@
 package com.Electroinova.inovinfo.ui.screens.pendientes
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.Electroinova.inovinfo.data.remote.PendienteDto
 import com.Electroinova.inovinfo.ui.components.PendingCard
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-private data class Pendiente(
-    val unidad:     String,
-    val sede:       String,
-    val urgencia:   String,
-    val fechaLabel: String,
-    val nota:       String
-)
-
-private val PENDIENTES = listOf(
-    Pendiente("8007",  "Buga",          "vencido", "Vencido hace 2 meses",  "Baterías desconectadas sin solución"),
-    Pendiente("3023",  "Tuluá",         "vencido", "Vencido hace 4 meses",  "Unidad sin movimiento desde diciembre"),
-    Pendiente("16016", "Buga",          "hoy",     "Hoy",                   "Cámara lateral + GPS pendiente de instalación"),
-    Pendiente("2237",  "Buga",          "futuro",  "4 jul 2026",            "Cambio cámaras lateral y reversa"),
-)
-
-private val FILTROS = listOf("Todos", "Vencidos", "Esta semana", "Resueltos")
+private val FILTROS = listOf("Todos", "Vencidos", "Esta semana", "Futuros")
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PendientesScreen() {
-    var filtroActivo by remember { mutableStateOf("Todos") }
-    val vencidos      = PENDIENTES.count { it.urgencia == "vencido" }
+fun PendientesScreen(
+    viewModel: PendientesViewModel = hiltViewModel()
+) {
+    val uiState       by viewModel.uiState.collectAsStateWithLifecycle()
+    var filtroActivo  by remember { mutableStateOf("Todos") }
+
+    val vencidos = uiState.pendientes.count { it.urgencia == "vencido" }
+    val hayHoy   = uiState.pendientes.any { it.urgencia == "hoy" }
 
     val pendientesFiltrados = when (filtroActivo) {
-        "Vencidos"     -> PENDIENTES.filter { it.urgencia == "vencido" }
-        "Esta semana"  -> PENDIENTES.filter { it.urgencia == "hoy" }
-        "Resueltos"    -> emptyList()
-        else           -> PENDIENTES
+        "Vencidos"    -> uiState.pendientes.filter { it.urgencia == "vencido" }
+        "Esta semana" -> uiState.pendientes.filter { it.urgencia == "hoy" }
+        "Futuros"     -> uiState.pendientes.filter { it.urgencia == "futuro" }
+        else          -> uiState.pendientes
     }
-
-    val hayPendienteHoy = PENDIENTES.any { it.urgencia == "hoy" }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
-        // ── TopBar ───────────────────────────────────────────────────────────
-        Surface(
-            color           = MaterialTheme.colorScheme.primary,
-            shadowElevation = 4.dp
-        ) {
+        // ── TopBar ────────────────────────────────────────────────────────────
+        Surface(color = MaterialTheme.colorScheme.primary, shadowElevation = 4.dp) {
             Row(
-                modifier          = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 BadgedBox(
@@ -93,68 +60,62 @@ fun PendientesScreen() {
                         }
                     }
                 ) {
-                    Icon(
-                        imageVector        = Icons.Default.Notifications,
-                        contentDescription = null,
-                        tint               = Color.White,
-                        modifier           = Modifier.size(22.dp)
-                    )
+                    Icon(Icons.Default.Notifications, null, tint = Color.White, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text  = "Pendientes",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
-                    )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Pendientes", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
                     if (vencidos > 0) {
-                        Text(
-                            text  = "$vencidos vencidos",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFFF8A80)
-                        )
+                        Text("$vencidos vencidos", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFF8A80))
                     }
+                }
+                IconButton(onClick = { viewModel.cargarPendientes() }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Actualizar", tint = Color.White)
                 }
             }
         }
 
+        // Cargando
+        if (uiState.isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            return@Column
+        }
+
+        // Error
+        if (uiState.error != null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+                    Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = { viewModel.cargarPendientes() }) { Text("Reintentar") }
+                }
+            }
+            return@Column
+        }
+
         LazyColumn(
-            modifier            = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
+            modifier            = Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-
-            // Banner de alerta hoy
-            if (hayPendienteHoy) {
+            // Banner hoy
+            if (hayHoy) {
                 item {
                     Spacer(Modifier.height(12.dp))
+                    val hoy = uiState.pendientes.filter { it.urgencia == "hoy" }
                     Card(
                         shape  = RoundedCornerShape(10.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))
                     ) {
-                        Row(
-                            modifier          = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector        = Icons.Default.Notifications,
-                                contentDescription = null,
-                                tint               = Color(0xFFF9A825),
-                                modifier           = Modifier.size(20.dp)
-                            )
+                        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Notifications, null, tint = Color(0xFFF9A825), modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(10.dp))
                             Column {
-                                Text(
-                                    text  = "Visita programada hoy",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                                    color = Color(0xFF795548)
-                                )
-                                Text(
-                                    text  = "Unidad 16016 · Buga",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF795548)
-                                )
+                                Text("${hoy.size} visita(s) programada(s) para hoy", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold), color = Color(0xFF795548))
+                                hoy.take(2).forEach {
+                                    Text("Unidad ${it.unidad_numero} · ${it.sede_nombre}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF795548))
+                                }
                             }
                         }
                     }
@@ -176,35 +137,43 @@ fun PendientesScreen() {
                 }
             }
 
-            // Lista de pendientes
-            items(pendientesFiltrados) { pendiente ->
-                PendingCard(
-                    unidad     = pendiente.unidad,
-                    sede       = pendiente.sede,
-                    urgencia   = pendiente.urgencia,
-                    fechaLabel = pendiente.fechaLabel,
-                    nota       = pendiente.nota
-                )
-            }
-
+            // Lista
             if (pendientesFiltrados.isEmpty()) {
                 item {
-                    Column(
-                        modifier            = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 40.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text  = "Sin pendientes en esta categoría",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
+                        Text("Sin pendientes en esta categoría", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+            } else {
+                items(pendientesFiltrados) { pendiente ->
+                    PendingCard(
+                        unidad     = pendiente.unidad_numero,
+                        sede       = pendiente.sede_nombre,
+                        urgencia   = pendiente.urgencia,
+                        fechaLabel = formatearFecha(pendiente),
+                        nota       = pendiente.nota_seguimiento ?: "Sin nota"
+                    )
                 }
             }
 
             item { Spacer(Modifier.height(12.dp)) }
         }
+    }
+}
+
+private fun formatearFecha(pendiente: PendienteDto): String {
+    return try {
+        val fecha = LocalDate.parse(pendiente.fecha_seguimiento.take(10))
+        val hoy   = LocalDate.now()
+        when {
+            fecha.isBefore(hoy) -> {
+                val dias = java.time.temporal.ChronoUnit.DAYS.between(fecha, hoy)
+                "Vencido hace $dias día(s)"
+            }
+            fecha.isEqual(hoy) -> "Hoy"
+            else -> fecha.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale("es", "CO")))
+        }
+    } catch (e: Exception) {
+        pendiente.fecha_seguimiento
     }
 }

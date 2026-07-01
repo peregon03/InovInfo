@@ -10,7 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -42,13 +42,12 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             InovInfoTheme {
-                val navController  = rememberNavController()
+                val navController = rememberNavController()
                 val authViewModel: AuthViewModel = hiltViewModel()
 
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
-                // Rutas que NO muestran la barra de navegación inferior
                 val authRoutes = setOf(
                     Screen.Login.route,
                     Screen.Register.route,
@@ -57,7 +56,7 @@ class MainActivity : ComponentActivity() {
                 )
                 val showBottomBar = currentRoute != null && currentRoute !in authRoutes
 
-                // Colectar eventos de navegación del AuthViewModel
+                // Eventos de navegación del auth
                 LaunchedEffect(Unit) {
                     authViewModel.navEvent.collect { event ->
                         when (event) {
@@ -86,16 +85,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Verificar sesión al iniciar la app
-                LaunchedEffect(Unit) {
-                    authViewModel.checkSesion()
-                }
+                LaunchedEffect(Unit) { authViewModel.checkSesion() }
 
                 val bottomNavItems = listOf(
                     BottomNavItem(Screen.NuevaVisita, Icons.Default.AddCircle,    "Nueva Visita"),
                     BottomNavItem(Screen.Historial,   Icons.Default.List,          "Historial"),
                     BottomNavItem(Screen.Pendientes,  Icons.Default.Notifications, "Pendientes"),
-                    BottomNavItem(Screen.Admin,        Icons.Default.Settings,     "Admin"),
+                    BottomNavItem(Screen.Perfil,      Icons.Default.Person,        "Perfil"),
                 )
 
                 Scaffold(
@@ -116,12 +112,7 @@ class MainActivity : ComponentActivity() {
                                                 restoreState    = true
                                             }
                                         },
-                                        icon  = {
-                                            Icon(
-                                                imageVector        = item.icon,
-                                                contentDescription = item.label
-                                            )
-                                        },
+                                        icon  = { Icon(item.icon, contentDescription = item.label) },
                                         label = { Text(item.label, maxLines = 1) },
                                         colors = NavigationBarItemDefaults.colors(
                                             selectedIconColor   = ElectroGold,

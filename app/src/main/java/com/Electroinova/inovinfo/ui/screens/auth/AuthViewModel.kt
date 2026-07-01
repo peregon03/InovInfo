@@ -192,7 +192,7 @@ class AuthViewModel @Inject constructor(
             nombre   = response.usuario.nombre,
             email    = response.usuario.email,
             rol      = response.usuario.rol,
-            permisos = response.usuario.permisos
+            permisos = response.usuario.permisos ?: emptyList()
         )
     }
 

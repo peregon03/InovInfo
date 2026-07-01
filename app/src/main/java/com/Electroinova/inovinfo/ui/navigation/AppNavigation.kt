@@ -7,7 +7,6 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import com.Electroinova.inovinfo.ui.screens.admin.AdminScreen
 import com.Electroinova.inovinfo.ui.screens.auth.AuthViewModel
 import com.Electroinova.inovinfo.ui.screens.auth.LoginScreen
 import com.Electroinova.inovinfo.ui.screens.auth.RecuperarPasswordScreen
@@ -16,6 +15,7 @@ import com.Electroinova.inovinfo.ui.screens.auth.VerificacionScreen
 import com.Electroinova.inovinfo.ui.screens.historial.HistorialScreen
 import com.Electroinova.inovinfo.ui.screens.nuevavisita.NuevaVisitaScreen
 import com.Electroinova.inovinfo.ui.screens.pendientes.PendientesScreen
+import com.Electroinova.inovinfo.ui.screens.perfil.PerfilScreen
 
 @Composable
 fun AppNavigation(
@@ -50,6 +50,6 @@ fun AppNavigation(
         composable(Screen.NuevaVisita.route) { NuevaVisitaScreen() }
         composable(Screen.Historial.route)   { HistorialScreen() }
         composable(Screen.Pendientes.route)  { PendientesScreen() }
-        composable(Screen.Admin.route)       { AdminScreen() }
+        composable(Screen.Perfil.route)      { PerfilScreen(navController) }
     }
 }

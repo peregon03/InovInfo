@@ -1,62 +1,16 @@
 package com.Electroinova.inovinfo.ui.screens.nuevavisita
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddCircle
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.InputChip
-import androidx.compose.material3.InputChipDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,19 +20,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.Electroinova.inovinfo.data.remote.EstadoDto
 import com.Electroinova.inovinfo.ui.components.PhotoGrid
 import com.Electroinova.inovinfo.ui.components.estadoColor
-
-private val ESTADOS = listOf("OK", "Con novedad", "Inoperativa", "Sin llaves", "Bat. desconectada")
-
-private val SUMINISTROS = listOf(
-    "Sum. Accesorios general",
-    "Suministro e Instalación Visor 7\"",
-    "Cable de cámara 2.5m",
-    "Cable de cámara 1.5m",
-    "Conectores tipo avión 4 pines",
-    "Fusibles"
-)
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -86,32 +33,39 @@ fun NuevaVisitaScreen(
     viewModel: NuevaVisitaViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var unidadExpanded     by remember { mutableStateOf(false) }
     var suministrosExpanded by remember { mutableStateOf(false) }
 
-    val mostrarNovedad = uiState.estadoSeleccionado != "OK" &&
-                         uiState.estadoSeleccionado != "Inoperativa"
+    val hoy = LocalDate.now().format(
+        DateTimeFormatter.ofPattern("d MMM yyyy", Locale("es", "CO"))
+    )
+
+    val mostrarNovedad = uiState.estadoSeleccionado != null &&
+        uiState.estadoSeleccionado!!.nombre != "OK" &&
+        uiState.estadoSeleccionado!!.nombre != "Inoperativa"
 
     val badgePatron = when {
-        uiState.estadoSeleccionado == "OK"          -> "Patrón estándar"
+        uiState.estadoSeleccionado?.nombre == "OK" -> "Patrón estándar"
         uiState.geminiState is GeminiUiState.Success -> "Redactado por IA ✦"
-        uiState.novedadTecnico.isNotBlank()          -> "Redactado por IA ✦"
-        else                                          -> null
+        uiState.novedadTecnico.isNotBlank()           -> "Redactado por IA ✦"
+        else                                           -> null
     }
 
-    // Log en consola cuando cambia el estado de Gemini
-    LaunchedEffect(uiState.geminiState) {
-        // El error ahora se muestra directamente en la UI (ver bloque rojo bajo el botón)
+    // Snackbar de éxito
+    if (uiState.guardadoExitoso) {
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.delay(2500)
+            viewModel.limpiarExito()
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
-            // ── TopBar ───────────────────────────────────────────────────────
+            // ── TopBar ────────────────────────────────────────────────────────
             Surface(color = MaterialTheme.colorScheme.primary, shadowElevation = 4.dp) {
                 Row(
-                    modifier          = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    modifier          = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.AddCircle, null, tint = Color.White, modifier = Modifier.size(22.dp))
@@ -122,7 +76,7 @@ fun NuevaVisitaScreen(
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = Color.White
                         )
-                        Text("22 jun 2026", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+                        Text(hoy, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
                     }
                     Box(
                         modifier         = Modifier.size(38.dp).clip(CircleShape)
@@ -130,7 +84,7 @@ fun NuevaVisitaScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "JA",
+                            uiState.usuarioIniciales,
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSecondary
                         )
@@ -138,51 +92,99 @@ fun NuevaVisitaScreen(
                 }
             }
 
-            // ── Formulario ───────────────────────────────────────────────────
+            // ── Cargando catálogos ────────────────────────────────────────────
+            if (uiState.catalogosLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(12.dp))
+                        Text("Cargando datos...", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                return@Column
+            }
+
+            if (uiState.errorCatalogos != null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+                        Icon(Icons.Default.WifiOff, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text(uiState.errorCatalogos!!, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick = { viewModel.cargarCatalogos() }) { Text("Reintentar") }
+                    }
+                }
+                return@Column
+            }
+
+            // ── Formulario ────────────────────────────────────────────────────
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
 
-                // 1. N.º Unidad
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Banner éxito
+                if (uiState.guardadoExitoso) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFE8F5E9)
+                    ) {
+                        Row(
+                            modifier          = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Visita guardada correctamente", color = Color(0xFF2E7D32), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+
+                // 1. Seleccionar unidad
+                ExposedDropdownMenuBox(
+                    expanded         = unidadExpanded,
+                    onExpandedChange = { unidadExpanded = it }
+                ) {
                     OutlinedTextField(
-                        value         = uiState.numeroUnidad,
-                        onValueChange = viewModel::onNumeroUnidadChange,
-                        label         = { Text("N.º Unidad") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine    = true,
-                        modifier      = Modifier.weight(1f)
+                        value         = uiState.unidadSeleccionada?.let { "Unidad ${it.numero} · ${it.sede_nombre}" } ?: "",
+                        onValueChange = {},
+                        readOnly      = true,
+                        label         = { Text("Unidad") },
+                        placeholder   = { Text("Selecciona una unidad") },
+                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unidadExpanded) },
+                        modifier      = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
                     )
-                    if (uiState.numeroUnidad.isNotBlank()) {
-                        Spacer(Modifier.width(8.dp))
-                        Surface(color = MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(8.dp)) {
-                            Row(
-                                modifier          = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(Icons.Default.LocationOn, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Buga", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                    ExposedDropdownMenu(
+                        expanded         = unidadExpanded,
+                        onDismissRequest = { unidadExpanded = false }
+                    ) {
+                        if (uiState.unidades.isEmpty()) {
+                            DropdownMenuItem(
+                                text    = { Text("Sin unidades registradas", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                onClick = {}
+                            )
+                        } else {
+                            uiState.unidades.forEach { unidad ->
+                                DropdownMenuItem(
+                                    text    = { Text("${unidad.numero} · ${unidad.sede_nombre}") },
+                                    onClick = { viewModel.onUnidadSelect(unidad); unidadExpanded = false }
+                                )
                             }
                         }
                     }
                 }
 
-                // 2. Estado de la unidad
+                // 2. Estado
                 Column {
                     Text("Estado de la unidad", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ESTADOS.forEach { estado ->
-                            val (bgSel, fgSel) = estadoColor(estado)
+                        uiState.estados.forEach { estado ->
+                            val (bgSel, fgSel) = estadoColor(estado.nombre)
                             FilterChip(
-                                selected = uiState.estadoSeleccionado == estado,
-                                onClick  = { viewModel.onEstadoChange(estado) },
-                                label    = { Text(estado, style = MaterialTheme.typography.labelSmall) },
+                                selected = uiState.estadoSeleccionado?.id == estado.id,
+                                onClick  = { viewModel.onEstadoSelect(estado) },
+                                label    = { Text(estado.nombre, style = MaterialTheme.typography.labelSmall) },
                                 colors   = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = bgSel,
                                     selectedLabelColor     = fgSel
@@ -192,7 +194,7 @@ fun NuevaVisitaScreen(
                     }
                 }
 
-                // 3. Novedad del técnico (condicional)
+                // 3. Novedad (condicional)
                 if (mostrarNovedad) {
                     OutlinedTextField(
                         value         = uiState.novedadTecnico,
@@ -202,29 +204,20 @@ fun NuevaVisitaScreen(
                         minLines      = 3,
                         maxLines      = 5,
                         trailingIcon  = {
-                            IconButton(onClick = { /* Speech-to-Text — próxima fase */ }) {
-                                Icon(Icons.Default.Mic, contentDescription = "Voz")
-                            }
+                            IconButton(onClick = {}) { Icon(Icons.Default.Mic, contentDescription = "Voz") }
                         },
                         modifier      = Modifier.fillMaxWidth()
                     )
 
-                    // Botón "Estructurar con IA" — solo si hay texto escrito
                     if (uiState.novedadTecnico.isNotBlank()) {
                         Button(
                             onClick  = { viewModel.estructurarObservacion() },
                             enabled  = uiState.geminiState !is GeminiUiState.Loading,
                             modifier = Modifier.fillMaxWidth(),
-                            colors   = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF1565C0)
-                            )
+                            colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0))
                         ) {
                             if (uiState.geminiState is GeminiUiState.Loading) {
-                                CircularProgressIndicator(
-                                    modifier    = Modifier.size(16.dp),
-                                    color       = Color.White,
-                                    strokeWidth = 2.dp
-                                )
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
                                 Spacer(Modifier.width(8.dp))
                                 Text("Estructurando...", style = MaterialTheme.typography.labelLarge)
                             } else {
@@ -234,15 +227,10 @@ fun NuevaVisitaScreen(
                             }
                         }
 
-                        // Error visible en pantalla (no solo Snackbar)
                         if (uiState.geminiState is GeminiUiState.Error) {
-                            Surface(
-                                color  = MaterialTheme.colorScheme.errorContainer,
-                                shape  = RoundedCornerShape(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text     = "Error: ${(uiState.geminiState as GeminiUiState.Error).mensaje}",
+                                    "Error: ${(uiState.geminiState as GeminiUiState.Error).mensaje}",
                                     style    = MaterialTheme.typography.bodySmall,
                                     color    = MaterialTheme.colorScheme.onErrorContainer,
                                     modifier = Modifier.padding(10.dp)
@@ -259,12 +247,7 @@ fun NuevaVisitaScreen(
                         if (badgePatron != null) {
                             Spacer(Modifier.width(8.dp))
                             Surface(color = Color(0xFF1565C0), shape = RoundedCornerShape(4.dp)) {
-                                Text(
-                                    badgePatron,
-                                    style    = MaterialTheme.typography.labelSmall,
-                                    color    = Color.White,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
+                                Text(badgePatron, style = MaterialTheme.typography.labelSmall, color = Color.White, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                             }
                         }
                     }
@@ -274,16 +257,8 @@ fun NuevaVisitaScreen(
                         shape  = RoundedCornerShape(8.dp)
                     ) {
                         Box(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text  = uiState.observacion,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(end = 60.dp)
-                            )
-                            TextButton(
-                                onClick  = {},
-                                modifier = Modifier.align(Alignment.TopEnd)
-                            ) {
+                            Text(uiState.observacion, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(end = 60.dp))
+                            TextButton(onClick = {}, modifier = Modifier.align(Alignment.TopEnd)) {
                                 Icon(Icons.Default.Edit, null, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(2.dp))
                                 Text("Editar", style = MaterialTheme.typography.labelSmall)
@@ -301,8 +276,8 @@ fun NuevaVisitaScreen(
                         onExpandedChange = { suministrosExpanded = it }
                     ) {
                         OutlinedTextField(
-                            value         = if (uiState.selectedSuministros.isEmpty()) "Ninguno"
-                                            else "${uiState.selectedSuministros.size} seleccionado(s)",
+                            value         = if (uiState.suministrosSeleccionados.isEmpty()) "Ninguno"
+                                            else "${uiState.suministrosSeleccionados.size} seleccionado(s)",
                             onValueChange = {},
                             readOnly      = true,
                             label         = { Text("Agregar suministro") },
@@ -313,32 +288,40 @@ fun NuevaVisitaScreen(
                             expanded         = suministrosExpanded,
                             onDismissRequest = { suministrosExpanded = false }
                         ) {
-                            SUMINISTROS.forEach { item ->
+                            uiState.suministrosCatalogo.forEach { item ->
                                 DropdownMenuItem(
-                                    text    = { Text(item) },
-                                    onClick = { viewModel.onSuministroToggle(item) }
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (item.id in uiState.suministrosSeleccionados) {
+                                                Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                                Spacer(Modifier.width(8.dp))
+                                            }
+                                            Text(item.nombre)
+                                        }
+                                    },
+                                    onClick = { viewModel.onSuministroToggle(item.id) }
                                 )
                             }
                         }
                     }
-                    if (uiState.selectedSuministros.isNotEmpty()) {
+                    if (uiState.suministrosSeleccionados.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            uiState.selectedSuministros.forEach { item ->
-                                InputChip(
-                                    selected = true,
-                                    onClick  = { viewModel.onSuministroToggle(item) },
-                                    label    = { Text(item, style = MaterialTheme.typography.labelSmall) },
-                                    colors   = InputChipDefaults.inputChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                            uiState.suministrosCatalogo
+                                .filter { it.id in uiState.suministrosSeleccionados }
+                                .forEach { item ->
+                                    InputChip(
+                                        selected = true,
+                                        onClick  = { viewModel.onSuministroToggle(item.id) },
+                                        label    = { Text(item.nombre, style = MaterialTheme.typography.labelSmall) },
+                                        colors   = InputChipDefaults.inputChipColors(selectedContainerColor = MaterialTheme.colorScheme.primaryContainer)
                                     )
-                                )
-                            }
+                                }
                         }
                     }
                 }
 
-                // 6. Requiere seguimiento
+                // 6. Seguimiento
                 Column {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Notifications, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
@@ -361,9 +344,10 @@ fun NuevaVisitaScreen(
                                     value         = uiState.fechaSeguimiento,
                                     onValueChange = viewModel::onFechaSeguimientoChange,
                                     label         = { Text("Fecha de seguimiento") },
-                                    placeholder   = { Text("dd/mm/aaaa") },
+                                    placeholder   = { Text("AAAA-MM-DD") },
                                     trailingIcon  = { Icon(Icons.Default.CalendarToday, null) },
                                     singleLine    = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     modifier      = Modifier.fillMaxWidth()
                                 )
                                 OutlinedTextField(
@@ -386,15 +370,33 @@ fun NuevaVisitaScreen(
                     PhotoGrid(photoCount = uiState.photoCount, onAddPhoto = viewModel::onAddPhoto)
                 }
 
+                // Error guardar
+                if (uiState.errorGuardar != null) {
+                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.errorContainer) {
+                        Text(
+                            uiState.errorGuardar!!,
+                            color    = MaterialTheme.colorScheme.onErrorContainer,
+                            style    = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.fillMaxWidth().padding(12.dp)
+                        )
+                    }
+                }
+
                 // 8. Botón guardar
                 Button(
-                    onClick  = { /* próxima fase: guardar en Room */ },
+                    onClick  = { viewModel.guardarVisita() },
+                    enabled  = !uiState.guardando,
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     shape    = RoundedCornerShape(10.dp),
                     colors   = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
+                    if (uiState.guardando) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    } else {
+                        Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Text(
                         if (uiState.requiereSeguimiento) "Guardar + crear recordatorio" else "Guardar registro",
                         style = MaterialTheme.typography.labelLarge
@@ -404,6 +406,5 @@ fun NuevaVisitaScreen(
                 Spacer(Modifier.height(8.dp))
             }
         }
-
     }
 }

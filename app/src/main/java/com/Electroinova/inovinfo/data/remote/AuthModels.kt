@@ -28,7 +28,7 @@ data class UsuarioResponse(
     val nombre:   String,
     val email:    String,
     val rol:      String,
-    val permisos: List<String> = emptyList()
+    val permisos: List<String>? = null
 )
 
 data class MensajeResponse(val mensaje: String)

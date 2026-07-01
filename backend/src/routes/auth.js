@@ -110,7 +110,7 @@ router.post('/verificar-registro', async (req, res) => {
             { expiresIn: process.env.JWT_EXPIRES_IN }
         );
 
-        res.status(201).json({ token, usuario });
+        res.status(201).json({ token, usuario: { ...usuario, permisos: [] } });
 
     } catch (err) {
         console.error('Error en verificar-registro:', err.message);
