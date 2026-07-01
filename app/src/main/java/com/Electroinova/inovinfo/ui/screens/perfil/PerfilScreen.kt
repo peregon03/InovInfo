@@ -33,6 +33,7 @@ fun PerfilScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCrearTecnicoDialog by remember { mutableStateOf(false) }
+    var showCrearUnidadDialog  by remember { mutableStateOf(false) }
 
     // Colectar evento de cerrar sesión
     LaunchedEffect(Unit) {
@@ -180,6 +181,84 @@ fun PerfilScreen(
                 }
             }
 
+            // ── Gestión de catálogos — unidades (solo coordinadora) ──────────
+            if (uiState.esCoordinadora) {
+                Card(
+                    modifier  = Modifier.fillMaxWidth(),
+                    shape     = RoundedCornerShape(12.dp),
+                    colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DirectionsCar, null, tint = ElectroNavyBlue, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Flota de unidades",
+                                style    = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (uiState.catalogosLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                IconButton(onClick = { viewModel.cargarCatalogos() }, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        if (uiState.unidades.isEmpty() && !uiState.catalogosLoading) {
+                            Text(
+                                "Sin unidades registradas",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            uiState.unidades.take(5).forEach { u ->
+                                Row(
+                                    modifier          = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Unidad ${u.numero}",
+                                        style    = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        u.sede_nombre,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+                            }
+                            if (uiState.unidades.size > 5) {
+                                Text(
+                                    "+ ${uiState.unidades.size - 5} más",
+                                    style    = MaterialTheme.typography.bodySmall,
+                                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick  = { showCrearUnidadDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape    = RoundedCornerShape(10.dp),
+                            colors   = ButtonDefaults.buttonColors(containerColor = ElectroNavyBlue)
+                        ) {
+                            Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Agregar unidad")
+                        }
+                    }
+                }
+            }
+
             // ── Cerrar sesión ─────────────────────────────────────────────────
             OutlinedButton(
                 onClick  = { viewModel.cerrarSesion() },
@@ -195,6 +274,19 @@ fun PerfilScreen(
 
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    // ── Dialog: Crear unidad ─────────────────────────────────────────────────
+    if (showCrearUnidadDialog) {
+        CrearUnidadDialog(
+            sedes     = uiState.sedes,
+            isLoading = uiState.crearUnidadLoading,
+            onDismiss = { showCrearUnidadDialog = false },
+            onCrear   = { numero, sedeId ->
+                viewModel.crearUnidad(numero, sedeId)
+                showCrearUnidadDialog = false
+            }
+        )
     }
 
     // ── Dialog: Crear técnico ─────────────────────────────────────────────────
@@ -317,6 +409,79 @@ private fun CrearTecnicoDialog(
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
                 } else {
                     Text("Crear técnico")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CrearUnidadDialog(
+    sedes:     List<com.Electroinova.inovinfo.data.remote.SedeDto>,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onCrear:   (numero: String, sedeId: Int) -> Unit
+) {
+    var numero       by remember { mutableStateOf("") }
+    var sedeExpanded by remember { mutableStateOf(false) }
+    var sedeSelected by remember { mutableStateOf(sedes.firstOrNull()) }
+
+    // Si las sedes se cargan después de abrir el dialog
+    LaunchedEffect(sedes) { if (sedeSelected == null) sedeSelected = sedes.firstOrNull() }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nueva unidad", fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value         = numero,
+                    onValueChange = { numero = it },
+                    label         = { Text("Número de unidad") },
+                    placeholder   = { Text("Ej: 001") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth()
+                )
+                ExposedDropdownMenuBox(
+                    expanded         = sedeExpanded,
+                    onExpandedChange = { sedeExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value         = sedeSelected?.nombre ?: "Sin sedes",
+                        onValueChange = {},
+                        readOnly      = true,
+                        label         = { Text("Sede") },
+                        trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = sedeExpanded) },
+                        modifier      = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    )
+                    ExposedDropdownMenu(
+                        expanded         = sedeExpanded,
+                        onDismissRequest = { sedeExpanded = false }
+                    ) {
+                        sedes.forEach { sede ->
+                            DropdownMenuItem(
+                                text    = { Text(sede.nombre) },
+                                onClick = { sedeSelected = sede; sedeExpanded = false }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick  = { sedeSelected?.let { onCrear(numero, it.id) } },
+                enabled  = !isLoading && numero.isNotBlank() && sedeSelected != null,
+                colors   = ButtonDefaults.buttonColors(containerColor = ElectroNavyBlue)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Text("Agregar")
                 }
             }
         },

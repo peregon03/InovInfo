@@ -27,6 +27,15 @@ interface InovInfoApiService {
         @Body request: CrearVisitaRequest
     ): Map<String, Any>
 
+    @GET("api/catalogos/sedes")
+    suspend fun getSedes(@Header("Authorization") token: String): List<SedeDto>
+
+    @POST("api/catalogos/unidades")
+    suspend fun crearUnidad(
+        @Header("Authorization") token: String,
+        @Body request: CrearUnidadRequest
+    ): UnidadDto
+
     // ── Usuarios (coordinadora) ───────────────────────────────────────────────
     @GET("api/usuarios")
     suspend fun getUsuarios(@Header("Authorization") token: String): List<UsuarioAdminDto>

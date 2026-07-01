@@ -75,3 +75,15 @@ data class UsuarioAdminDto(
 
 data class ActualizarPermisosRequest(val permisos: List<String>)
 data class ActualizarEstadoRequest(val activo: Boolean)
+
+// ── Catálogos (gestión coordinadora) ──────────────────────────────────────────
+
+data class SedeDto(
+    val id:     Int,
+    val nombre: String
+)
+
+data class CrearUnidadRequest(
+    val numero:  String,
+    val sede_id: Int
+)

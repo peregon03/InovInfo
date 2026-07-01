@@ -50,6 +50,9 @@ data class NuevaVisitaUiState(
     // Gemini
     val geminiState: GeminiUiState = GeminiUiState.Idle,
 
+    // Rol
+    val esCoordinadora: Boolean = false,
+
     // Guardado
     val guardando:        Boolean = false,
     val guardadoExitoso:  Boolean = false,
@@ -81,7 +84,13 @@ class NuevaVisitaViewModel @Inject constructor(
             .take(2).mapNotNull { it.firstOrNull()?.uppercaseChar() }
             .joinToString("")
             .ifEmpty { "?" }
-        _uiState.update { it.copy(usuarioNombre = nombre, usuarioIniciales = iniciales) }
+        _uiState.update {
+            it.copy(
+                usuarioNombre    = nombre,
+                usuarioIniciales = iniciales,
+                esCoordinadora   = sessionManager.esCoordinadora()
+            )
+        }
         cargarCatalogos()
     }
 
@@ -91,33 +100,23 @@ class NuevaVisitaViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(catalogosLoading = true, errorCatalogos = null) }
             try {
-                val token = sessionManager.bearerToken()
-                val dUnidades     = async { inovInfoApi.getUnidades(token) }
-                val dSuministros  = async { inovInfoApi.getSuministros(token) }
-                val dEstados      = async { inovInfoApi.getEstados(token) }
-
-                val unidades    = dUnidades.await()
-                val suministros = dSuministros.await()
-                val estados     = dEstados.await()
-
-                val estadoOk = estados.firstOrNull { it.nombre == "OK" }
+                val token       = sessionManager.bearerToken()
+                val unidades    = inovInfoApi.getUnidades(token)
+                val suministros = inovInfoApi.getSuministros(token)
+                val estados     = inovInfoApi.getEstados(token)
+                val estadoOk    = estados.firstOrNull { it.nombre == "OK" }
                 _uiState.update {
                     it.copy(
-                        unidades             = unidades,
-                        suministrosCatalogo  = suministros,
-                        estados              = estados,
-                        estadoSeleccionado   = estadoOk,
-                        catalogosLoading     = false
+                        unidades            = unidades,
+                        suministrosCatalogo = suministros,
+                        estados             = estados,
+                        estadoSeleccionado  = estadoOk,
+                        catalogosLoading    = false
                     )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error cargando catálogos: ${e.message}")
-                _uiState.update {
-                    it.copy(
-                        catalogosLoading = false,
-                        errorCatalogos   = "Sin conexión al servidor"
-                    )
-                }
+                _uiState.update { it.copy(catalogosLoading = false, errorCatalogos = "Sin conexión al servidor") }
             }
         }
     }

@@ -47,7 +47,14 @@ fun AppNavigation(
         }
 
         // ── Principal ─────────────────────────────────────────────────────────
-        composable(Screen.NuevaVisita.route) { NuevaVisitaScreen() }
+        composable(Screen.NuevaVisita.route) {
+            NuevaVisitaScreen(onNavigateToPerfil = {
+                navController.navigate(Screen.Perfil.route) {
+                    launchSingleTop = true
+                    restoreState    = true
+                }
+            })
+        }
         composable(Screen.Historial.route)   { HistorialScreen() }
         composable(Screen.Pendientes.route)  { PendientesScreen() }
         composable(Screen.Perfil.route)      { PerfilScreen(navController) }

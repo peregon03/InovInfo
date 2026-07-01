@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -30,6 +31,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NuevaVisitaScreen(
+    onNavigateToPerfil: () -> Unit = {},
     viewModel: NuevaVisitaViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -112,6 +114,48 @@ fun NuevaVisitaScreen(
                         Text(uiState.errorCatalogos!!, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(16.dp))
                         Button(onClick = { viewModel.cargarCatalogos() }) { Text("Reintentar") }
+                    }
+                }
+                return@Column
+            }
+
+            // ── Sin unidades registradas ──────────────────────────────────────
+            if (uiState.unidades.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.DirectionsCar,
+                            contentDescription = null,
+                            tint     = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(56.dp)
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "Sin unidades registradas",
+                            style      = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            if (uiState.esCoordinadora)
+                                "Agrega las unidades de flota desde el Perfil para poder registrar visitas."
+                            else
+                                "No hay unidades disponibles aún. Contacta a la coordinadora para que las registre.",
+                            style     = MaterialTheme.typography.bodySmall,
+                            color     = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        if (uiState.esCoordinadora) {
+                            Spacer(Modifier.height(20.dp))
+                            Button(onClick = onNavigateToPerfil) {
+                                Icon(Icons.Default.Person, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Ir al Perfil")
+                            }
+                        }
                     }
                 }
                 return@Column
