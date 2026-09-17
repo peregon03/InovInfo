@@ -51,7 +51,7 @@ object AppModule {
     @Named("backend")
     fun provideBackendRetrofit(okHttpClient: OkHttpClient): Retrofit =
         Retrofit.Builder()
-            .baseUrl("http://137.131.230.163:3000/")
+            .baseUrl("https://api.electroinova.com/")
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
