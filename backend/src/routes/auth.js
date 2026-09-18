@@ -29,12 +29,6 @@ router.post('/solicitar-registro', async (req, res) => {
     }
 
     try {
-        // Solo permitir registro libre si no hay usuarios
-        const countResult = await pool.query('SELECT COUNT(*) FROM usuarios');
-        if (parseInt(countResult.rows[0].count) > 0) {
-            return res.status(403).json({ error: 'El registro inicial ya fue completado' });
-        }
-
         // Verificar si el email ya existe
         const existe = await pool.query('SELECT id FROM usuarios WHERE email = $1', [email.toLowerCase()]);
         if (existe.rows.length > 0) {
@@ -94,6 +88,7 @@ router.post('/verificar-registro', async (req, res) => {
         const usuarioResult = await pool.query(
             `INSERT INTO usuarios (nombre, email, password_hash, rol)
              VALUES ($1, $2, $3, 'coordinadora') RETURNING id, nombre, email, rol`,
+            // Todo usuario que se registra por este flujo es coordinadora
             [nombre, email.toLowerCase(), passHash]
         );
 
