@@ -6,20 +6,28 @@ router.use(verificarToken);
 
 // ── SEDES (solo lectura para todos) ──────────────────────────────────────────
 router.get('/sedes', async (req, res) => {
-    const result = await pool.query('SELECT * FROM sedes WHERE activa = TRUE ORDER BY nombre');
-    res.json(result.rows);
+    try {
+        const result = await pool.query('SELECT * FROM sedes WHERE activa = TRUE ORDER BY nombre');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ── UNIDADES ──────────────────────────────────────────────────────────────────
 router.get('/unidades', async (req, res) => {
-    const result = await pool.query(`
-        SELECT u.id, u.numero, u.activa, s.nombre AS sede_nombre, s.id AS sede_id
-        FROM unidades u
-        JOIN sedes s ON u.sede_id = s.id
-        WHERE u.activa = TRUE
-        ORDER BY u.numero
-    `);
-    res.json(result.rows);
+    try {
+        const result = await pool.query(`
+            SELECT u.id, u.numero, u.activa, s.nombre AS sede_nombre, s.id AS sede_id
+            FROM unidades u
+            JOIN sedes s ON u.sede_id = s.id
+            WHERE u.activa = TRUE
+            ORDER BY u.numero
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.post('/unidades', coordinadoraOPermiso('EDITAR_CATALOGOS'), async (req, res) => {
@@ -57,10 +65,14 @@ router.delete('/unidades/:id', coordinadoraOPermiso('EDITAR_CATALOGOS'), async (
 
 // ── SUMINISTROS ───────────────────────────────────────────────────────────────
 router.get('/suministros', async (req, res) => {
-    const result = await pool.query(
-        'SELECT * FROM suministros WHERE activo = TRUE ORDER BY categoria, nombre'
-    );
-    res.json(result.rows);
+    try {
+        const result = await pool.query(
+            'SELECT * FROM suministros WHERE activo = TRUE ORDER BY categoria, nombre'
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.post('/suministros', coordinadoraOPermiso('EDITAR_CATALOGOS'), async (req, res) => {
@@ -92,10 +104,14 @@ router.put('/suministros/:id', coordinadoraOPermiso('EDITAR_CATALOGOS'), async (
 
 // ── TIPOS DE NOVEDAD ──────────────────────────────────────────────────────────
 router.get('/tipos-novedad', async (req, res) => {
-    const result = await pool.query(
-        'SELECT * FROM tipos_novedad WHERE activo = TRUE ORDER BY nombre'
-    );
-    res.json(result.rows);
+    try {
+        const result = await pool.query(
+            'SELECT * FROM tipos_novedad WHERE activo = TRUE ORDER BY nombre'
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.post('/tipos-novedad', coordinadoraOPermiso('EDITAR_CATALOGOS'), async (req, res) => {
@@ -127,10 +143,14 @@ router.put('/tipos-novedad/:id', coordinadoraOPermiso('EDITAR_CATALOGOS'), async
 
 // ── ESTADOS DE VISITA ─────────────────────────────────────────────────────────
 router.get('/estados', async (req, res) => {
-    const result = await pool.query(
-        'SELECT * FROM estados_visita WHERE activo = TRUE ORDER BY id'
-    );
-    res.json(result.rows);
+    try {
+        const result = await pool.query(
+            'SELECT * FROM estados_visita WHERE activo = TRUE ORDER BY id'
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 module.exports = router;
