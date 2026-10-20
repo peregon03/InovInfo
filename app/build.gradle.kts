@@ -93,6 +93,9 @@ dependencies {
     implementation(libs.retrofit.converter.gson)
     implementation(libs.okhttp.logging.interceptor)
 
+    // Coil (carga de imágenes desde URI local en PhotoGrid)
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 

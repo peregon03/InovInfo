@@ -1,5 +1,9 @@
 package com.Electroinova.inovinfo.ui.screens.nuevavisita
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,18 +21,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.Electroinova.inovinfo.data.remote.EstadoDto
 import com.Electroinova.inovinfo.ui.components.PhotoGrid
 import com.Electroinova.inovinfo.ui.components.estadoColor
+import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+/** Crea un URI temporal en caché para la foto de cámara usando FileProvider. */
+private fun crearUriTemporal(context: Context): Uri {
+    val archivo = File(context.cacheDir, "foto_${System.currentTimeMillis()}.jpg")
+    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", archivo)
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -37,9 +50,27 @@ fun NuevaVisitaScreen(
     viewModel: NuevaVisitaViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var unidadExpanded      by remember { mutableStateOf(false) }
-    var suministrosExpanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    var unidadExpanded            by remember { mutableStateOf(false) }
+    var suministrosExpanded       by remember { mutableStateOf(false) }
     var mostrarDialogoObservacion by remember { mutableStateOf(false) }
+    var mostrarDialogoFoto        by remember { mutableStateOf(false) }
+
+    // URI temporal para la captura con cámara (se crea antes de lanzar el intent)
+    var uriCamaraTemporal by remember { mutableStateOf<Uri?>(null) }
+
+    // Launcher: galería de imágenes
+    val galeriaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri -> uri?.let { viewModel.onFotoAgregada(it) } }
+
+    // Launcher: cámara (devuelve true si se guardó la foto en uriCamaraTemporal)
+    val camaraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { exito ->
+        if (exito) uriCamaraTemporal?.let { viewModel.onFotoAgregada(it) }
+    }
 
     val hoy = LocalDate.now().format(
         DateTimeFormatter.ofPattern("d MMM yyyy", Locale("es", "CO"))
@@ -440,9 +471,27 @@ fun NuevaVisitaScreen(
 
                 // 7. Fotos
                 Column {
-                    Text("Fotos", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Fotos (${uiState.fotos.size}/8)",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (uiState.subiendoFotos) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                uiState.progresoFotos,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(6.dp))
-                    PhotoGrid(photoCount = uiState.photoCount, onAddPhoto = viewModel::onAddPhoto)
+                    PhotoGrid(
+                        fotos          = uiState.fotos,
+                        onAgregarFoto  = { mostrarDialogoFoto = true },
+                        onEliminarFoto = viewModel::onFotoEliminada
+                    )
                 }
 
                 // Error guardar
@@ -473,7 +522,12 @@ fun NuevaVisitaScreen(
                         Spacer(Modifier.width(8.dp))
                     }
                     Text(
-                        if (uiState.requiereSeguimiento) "Guardar + crear recordatorio" else "Guardar registro",
+                        when {
+                            uiState.progresoFotos.isNotBlank() -> uiState.progresoFotos
+                            uiState.guardando                  -> "Guardando..."
+                            uiState.requiereSeguimiento        -> "Guardar + crear recordatorio"
+                            else                               -> "Guardar registro"
+                        },
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
@@ -481,6 +535,37 @@ fun NuevaVisitaScreen(
                 Spacer(Modifier.height(8.dp))
             }
         }
+    }
+
+    // ── Diálogo: Origen de foto (cámara o galería) ───────────────────────────
+    if (mostrarDialogoFoto) {
+        AlertDialog(
+            onDismissRequest = { mostrarDialogoFoto = false },
+            title   = { Text("Agregar foto", fontWeight = FontWeight.SemiBold) },
+            text    = { Text("Elige de dónde tomar la foto") },
+            confirmButton = {
+                Button(onClick = {
+                    mostrarDialogoFoto = false
+                    val uri = crearUriTemporal(context)
+                    uriCamaraTemporal = uri
+                    camaraLauncher.launch(uri)
+                }) {
+                    Icon(Icons.Default.CameraAlt, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Cámara")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = {
+                    mostrarDialogoFoto = false
+                    galeriaLauncher.launch("image/*")
+                }) {
+                    Icon(Icons.Default.Photo, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Galería")
+                }
+            }
+        )
     }
 
     // ── Diálogo: Editar observación ──────────────────────────────────────────

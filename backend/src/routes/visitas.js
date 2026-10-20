@@ -1,6 +1,21 @@
-const router = require('express').Router();
-const pool   = require('../config/db');
+const router  = require('express').Router();
+const multer  = require('multer');
+const pool    = require('../config/db');
 const { verificarToken, coordinadoraOPermiso } = require('../middleware/auth');
+const { subirFotoDrive } = require('../config/google');
+
+// Multer: almacenamiento en memoria (buffer directo → Drive, sin disco)
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits:  { fileSize: 5 * 1024 * 1024 }, // 5 MB
+    fileFilter: (_req, file, cb) => {
+        if (['image/jpeg', 'image/png'].includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Solo se permiten imágenes JPEG o PNG'));
+        }
+    },
+});
 
 router.use(verificarToken);
 
@@ -164,6 +179,90 @@ router.post('/', async (req, res) => {
         res.status(500).json({ error: err.message });
     } finally {
         client.release();
+    }
+});
+
+// POST /api/visitas/:id/fotos — sube una foto a Drive y guarda la URL en BD
+router.post('/:id/fotos', upload.single('foto'), async (req, res) => {
+    const visitaId = parseInt(req.params.id, 10);
+
+    if (!req.file) {
+        return res.status(400).json({ error: 'Se requiere el campo "foto"' });
+    }
+
+    try {
+        // Verificar que la visita existe y pertenece al técnico (o es coordinadora)
+        const visitaCheck = await pool.query(
+            'SELECT id, tecnico_id FROM visitas WHERE id = $1',
+            [visitaId]
+        );
+        if (visitaCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Visita no encontrada' });
+        }
+        const esCoordinadora = req.usuario.rol === 'coordinadora';
+        const esDueno        = visitaCheck.rows[0].tecnico_id === req.usuario.id;
+        if (!esCoordinadora && !esDueno) {
+            return res.status(403).json({ error: 'Sin permiso para esta visita' });
+        }
+
+        // Calcular el siguiente orden
+        const ordenRes = await pool.query(
+            'SELECT COALESCE(MAX(orden), 0) + 1 AS siguiente FROM visita_fotos WHERE visita_id = $1',
+            [visitaId]
+        );
+        const orden = ordenRes.rows[0].siguiente;
+
+        // Subir a Google Drive
+        const fileName = `visita_${visitaId}_foto_${orden}_${Date.now()}.jpg`;
+        const url      = await subirFotoDrive(req.file.buffer, fileName, req.file.mimetype);
+
+        // Guardar URL en la base de datos
+        const insertRes = await pool.query(
+            'INSERT INTO visita_fotos (visita_id, url, orden) VALUES ($1, $2, $3) RETURNING id, url',
+            [visitaId, url, orden]
+        );
+
+        res.status(201).json(insertRes.rows[0]);
+
+    } catch (err) {
+        console.error('Error subiendo foto:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/visitas/:id/fotos/:fotoId — elimina una foto de la BD
+router.delete('/:id/fotos/:fotoId', async (req, res) => {
+    const visitaId = parseInt(req.params.id,     10);
+    const fotoId   = parseInt(req.params.fotoId, 10);
+
+    try {
+        // Verificar que la visita existe y que el usuario tiene permiso
+        const visitaCheck = await pool.query(
+            'SELECT id, tecnico_id FROM visitas WHERE id = $1',
+            [visitaId]
+        );
+        if (visitaCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Visita no encontrada' });
+        }
+        const esCoordinadora = req.usuario.rol === 'coordinadora';
+        const esDueno        = visitaCheck.rows[0].tecnico_id === req.usuario.id;
+        if (!esCoordinadora && !esDueno) {
+            return res.status(403).json({ error: 'Sin permiso para esta visita' });
+        }
+
+        const deleteRes = await pool.query(
+            'DELETE FROM visita_fotos WHERE id = $1 AND visita_id = $2 RETURNING id',
+            [fotoId, visitaId]
+        );
+        if (deleteRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Foto no encontrada' });
+        }
+
+        res.json({ mensaje: 'Foto eliminada' });
+
+    } catch (err) {
+        console.error('Error eliminando foto:', err.message);
+        res.status(500).json({ error: err.message });
     }
 });
 

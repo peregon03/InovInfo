@@ -10,9 +10,11 @@ data class UnidadDto(
 )
 
 data class SuministroDto(
-    val id:        Int,
-    val nombre:    String,
-    val categoria: String? = null
+    val id:         Int,
+    val nombre:     String,
+    val categoria:  String?  = null,
+    val precio_ref: Double?  = null,
+    val activo:     Boolean  = true
 )
 
 data class EstadoDto(
@@ -88,9 +90,35 @@ data class CrearUnidadRequest(
     val sede_id: Int
 )
 
+data class ActualizarUnidadRequest(
+    val numero:  String,
+    val sede_id: Int,
+    val activa:  Boolean
+)
+
 data class CrearSedeRequest(val nombre: String)
 
 data class ActualizarSedeRequest(val nombre: String, val activa: Boolean)
+
+data class CrearSuministroRequest(
+    val nombre:     String,
+    val categoria:  String?,
+    val precio_ref: Double?
+)
+
+data class ActualizarSuministroRequest(
+    val nombre:     String,
+    val categoria:  String?,
+    val precio_ref: Double?,
+    val activo:     Boolean
+)
+
+// ── Fotos ─────────────────────────────────────────────────────────────────────
+
+data class FotoResponse(
+    val id:  Int,
+    val url: String
+)
 
 // ── Informes ────────────────────────────────────────────────────────────────
 
@@ -106,4 +134,12 @@ data class InformeResponse(
     val sheetUrl:      String,
     val pestana:       String,
     val totalVisitas:  Int
+)
+
+// ── Importación masiva desde Excel ────────────────────────────────────────────
+
+data class ImportarExcelResponse(
+    val sedesCreadas:   Int,
+    val unidadesCreadas: Int,
+    val errores:        List<String> = emptyList()
 )

@@ -1,5 +1,6 @@
 package com.Electroinova.inovinfo.data.remote
 
+import okhttp3.MultipartBody
 import retrofit2.http.*
 
 interface InovInfoApiService {
@@ -27,6 +28,21 @@ interface InovInfoApiService {
         @Body request: CrearVisitaRequest
     ): Map<String, Any>
 
+    @Multipart
+    @POST("api/visitas/{id}/fotos")
+    suspend fun subirFoto(
+        @Header("Authorization") token: String,
+        @Path("id") visitaId: Int,
+        @Part foto: MultipartBody.Part
+    ): FotoResponse
+
+    @DELETE("api/visitas/{id}/fotos/{fotoId}")
+    suspend fun eliminarFoto(
+        @Header("Authorization") token: String,
+        @Path("id") visitaId: Int,
+        @Path("fotoId") fotoId: Int
+    ): Map<String, String>
+
     @GET("api/catalogos/sedes")
     suspend fun getSedes(@Header("Authorization") token: String): List<SedeDto>
 
@@ -35,6 +51,32 @@ interface InovInfoApiService {
         @Header("Authorization") token: String,
         @Body request: CrearUnidadRequest
     ): UnidadDto
+
+    @PUT("api/catalogos/unidades/{id}")
+    suspend fun actualizarUnidad(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int,
+        @Body request: ActualizarUnidadRequest
+    ): UnidadDto
+
+    @DELETE("api/catalogos/unidades/{id}")
+    suspend fun eliminarUnidad(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int
+    ): Map<String, String>
+
+    @POST("api/catalogos/suministros")
+    suspend fun crearSuministro(
+        @Header("Authorization") token: String,
+        @Body request: CrearSuministroRequest
+    ): SuministroDto
+
+    @PUT("api/catalogos/suministros/{id}")
+    suspend fun actualizarSuministro(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int,
+        @Body request: ActualizarSuministroRequest
+    ): SuministroDto
 
     @POST("api/catalogos/sedes")
     suspend fun crearSede(
@@ -66,4 +108,12 @@ interface InovInfoApiService {
         @Header("Authorization") token: String,
         @Body request: GenerarInformeRequest
     ): InformeResponse
+
+    // ── Importación masiva desde Excel ───────────────────────────────────────
+    @Multipart
+    @POST("api/importar/excel")
+    suspend fun importarExcel(
+        @Header("Authorization") token: String,
+        @Part archivo: MultipartBody.Part
+    ): ImportarExcelResponse
 }

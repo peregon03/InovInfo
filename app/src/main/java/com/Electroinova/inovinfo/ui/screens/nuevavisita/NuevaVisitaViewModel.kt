@@ -1,18 +1,22 @@
 package com.Electroinova.inovinfo.ui.screens.nuevavisita
 
+import android.app.Application
+import android.net.Uri
 import android.util.Log
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.Electroinova.inovinfo.BuildConfig
 import com.Electroinova.inovinfo.data.local.SessionManager
 import com.Electroinova.inovinfo.data.remote.*
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 
 // ── Estado UI ─────────────────────────────────────────────────────────────────
@@ -49,7 +53,9 @@ data class NuevaVisitaUiState(
     val requiereSeguimiento:     Boolean     = false,
     val fechaSeguimiento:        String      = "",
     val notaSeguimiento:         String      = "",
-    val photoCount:              Int         = 0,
+    val fotos:                   List<Uri>   = emptyList(),
+    val subiendoFotos:           Boolean     = false,
+    val progresoFotos:           String      = "",
 
     // Gemini
     val geminiState: GeminiUiState = GeminiUiState.Idle,
@@ -76,8 +82,9 @@ private const val TAG = "NuevaVisitaVM"
 class NuevaVisitaViewModel @Inject constructor(
     private val geminiService:  GeminiService,
     private val inovInfoApi:    InovInfoApiService,
-    private val sessionManager: SessionManager
-) : ViewModel() {
+    private val sessionManager: SessionManager,
+    private val app:            Application
+) : AndroidViewModel(app) {
 
     private val _uiState = MutableStateFlow(NuevaVisitaUiState())
     val uiState: StateFlow<NuevaVisitaUiState> = _uiState.asStateFlow()
@@ -119,8 +126,14 @@ class NuevaVisitaViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error cargando catálogos: ${e.message}")
-                _uiState.update { it.copy(catalogosLoading = false, errorCatalogos = "Sin conexión al servidor") }
+                Log.e(TAG, "Error cargando catálogos: ${e.javaClass.simpleName} - ${e.message}", e)
+                val msg = when (e) {
+                    is java.net.UnknownHostException,
+                    is java.net.ConnectException -> "Sin conexión al servidor"
+                    is retrofit2.HttpException -> "Error del servidor: ${e.code()}"
+                    else -> "Error: ${e.message}"
+                }
+                _uiState.update { it.copy(catalogosLoading = false, errorCatalogos = msg) }
             }
         }
     }
@@ -178,8 +191,13 @@ class NuevaVisitaViewModel @Inject constructor(
     fun onNotaSeguimientoChange(value: String) =
         _uiState.update { it.copy(notaSeguimiento = value) }
 
-    fun onAddPhoto() =
-        _uiState.update { if (it.photoCount < 8) it.copy(photoCount = it.photoCount + 1) else it }
+    fun onFotoAgregada(uri: Uri) = _uiState.update { state ->
+        if (state.fotos.size < 8) state.copy(fotos = state.fotos + uri) else state
+    }
+
+    fun onFotoEliminada(index: Int) = _uiState.update { state ->
+        state.copy(fotos = state.fotos.toMutableList().also { it.removeAt(index) })
+    }
 
     // ── Guardar visita ────────────────────────────────────────────────────────
 
@@ -199,11 +217,14 @@ class NuevaVisitaViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(guardando = true, errorGuardar = null) }
             try {
+                val token       = sessionManager.bearerToken()
                 val suministros = _uiState.value.suministrosSeleccionados.map {
                     SuministroRequest(suministro_id = it, cantidad = 1)
                 }
-                inovInfoApi.crearVisita(
-                    token   = sessionManager.bearerToken(),
+
+                // 1. Crear la visita y obtener su ID
+                val visitaMap = inovInfoApi.crearVisita(
+                    token   = token,
                     request = CrearVisitaRequest(
                         unidad_id                = unidad.id,
                         estado_id                = estado.id,
@@ -215,8 +236,27 @@ class NuevaVisitaViewModel @Inject constructor(
                         suministros              = suministros
                     )
                 )
-                // Reset conservando catálogos e info de usuario
-                val snap = _uiState.value
+                val visitaId = (visitaMap["id"] as? Double)?.toInt()
+
+                // 2. Subir fotos una a una si existen y la visita se creó correctamente
+                val fotosASubir = _uiState.value.fotos
+                if (visitaId != null && fotosASubir.isNotEmpty()) {
+                    fotosASubir.forEachIndexed { index, uri ->
+                        _uiState.update {
+                            it.copy(progresoFotos = "Subiendo foto ${index + 1}/${fotosASubir.size}...")
+                        }
+                        try {
+                            val part = uriToMultipart(uri, index + 1)
+                            inovInfoApi.subirFoto(token, visitaId, part)
+                        } catch (e: Exception) {
+                            // Un error en una foto no cancela el guardado — se registra y continúa
+                            Log.w(TAG, "No se pudo subir foto ${index + 1}: ${e.message}")
+                        }
+                    }
+                }
+
+                // 3. Reset conservando catálogos e info de usuario
+                val snap     = _uiState.value
                 val estadoOk = snap.estados.firstOrNull { it.nombre == "OK" }
                 _uiState.update {
                     NuevaVisitaUiState(
@@ -231,14 +271,34 @@ class NuevaVisitaViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error guardando visita: ${e.message}")
-                _uiState.update { it.copy(errorGuardar = "Error al guardar la visita", guardando = false) }
+                Log.e(TAG, "Error guardando visita: ${e.javaClass.simpleName} - ${e.message}", e)
+                val msg = when (e) {
+                    is java.net.UnknownHostException,
+                    is java.net.ConnectException -> "Sin conexión al servidor"
+                    is retrofit2.HttpException -> "Error del servidor: ${e.code()} - ${e.response()?.errorBody()?.string()}"
+                    else -> "Error: ${e.javaClass.simpleName} - ${e.message}"
+                }
+                _uiState.update { it.copy(errorGuardar = msg, guardando = false) }
             }
         }
     }
 
     fun limpiarExito()       = _uiState.update { it.copy(guardadoExitoso = false) }
     fun limpiarErrorGuardar() = _uiState.update { it.copy(errorGuardar = null) }
+
+    // ── Utilidades de fotos ───────────────────────────────────────────────────
+
+    /**
+     * Convierte un [Uri] local en un [MultipartBody.Part] listo para Retrofit.
+     * Lee los bytes en memoria (máx. 5 MB, validado en el servidor).
+     */
+    private fun uriToMultipart(uri: Uri, index: Int): MultipartBody.Part {
+        val contentResolver = app.contentResolver
+        val mimeType        = contentResolver.getType(uri) ?: "image/jpeg"
+        val bytes           = contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+        val requestBody     = bytes.toRequestBody(mimeType.toMediaType())
+        return MultipartBody.Part.createFormData("foto", "foto_$index.jpg", requestBody)
+    }
 
     // ── Gemini ────────────────────────────────────────────────────────────────
 

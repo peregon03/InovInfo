@@ -37,7 +37,14 @@ class HistorialViewModel @Inject constructor(
                 val visitas = api.getVisitasHoy(sessionManager.bearerToken())
                 _uiState.update { it.copy(visitas = visitas, isLoading = false) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Sin conexión al servidor", isLoading = false) }
+                android.util.Log.e("HistorialVM", "Error: ${e.javaClass.simpleName} - ${e.message}", e)
+                val msg = when (e) {
+                    is java.net.UnknownHostException,
+                    is java.net.ConnectException -> "Sin conexión al servidor"
+                    is retrofit2.HttpException -> "Error del servidor: ${e.code()}"
+                    else -> "Error: ${e.message}"
+                }
+                _uiState.update { it.copy(error = msg, isLoading = false) }
             }
         }
     }
