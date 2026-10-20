@@ -15,6 +15,7 @@ import com.Electroinova.inovinfo.ui.screens.auth.VerificacionScreen
 import com.Electroinova.inovinfo.ui.screens.historial.HistorialScreen
 import com.Electroinova.inovinfo.ui.screens.nuevavisita.NuevaVisitaScreen
 import com.Electroinova.inovinfo.ui.screens.pendientes.PendientesScreen
+import com.Electroinova.inovinfo.ui.screens.admin.AdminScreen
 import com.Electroinova.inovinfo.ui.screens.perfil.PerfilScreen
 
 @Composable
@@ -58,5 +59,6 @@ fun AppNavigation(
         composable(Screen.Historial.route)   { HistorialScreen() }
         composable(Screen.Pendientes.route)  { PendientesScreen() }
         composable(Screen.Perfil.route)      { PerfilScreen(navController) }
+        composable(Screen.Admin.route)       { AdminScreen() }
     }
 }

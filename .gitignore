@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Credenciales de Google (nunca subir)
+gen-lang-client-*.json
+.env

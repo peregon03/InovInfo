@@ -1,7 +1,12 @@
 package com.Electroinova.inovinfo.ui.screens.admin
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,27 +20,33 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,33 +54,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.Electroinova.inovinfo.ui.components.SectionCard
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
-private data class Unidad(val numero: String, val sede: String)
-
-private val UNIDADES = listOf(
-    Unidad("3041",  "Buga"),
-    Unidad("8013",  "Tuluá"),
-    Unidad("8000",  "Tuluá"),
-    Unidad("42004", "Buga"),
-    Unidad("8014",  "Sur Occidente"),
-    Unidad("16016", "Buga"),
-)
-
-private data class Tecnico(val nombre: String, val rol: String)
-
-private val TECNICOS = listOf(
-    Tecnico("Juan Arango",    "Técnico"),
-    Tecnico("Carlos Muñoz",   "Técnico"),
-    Tecnico("María González", "Coordinadora"),
-)
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AdminScreen() {
-    var fechaDesde by remember { mutableStateOf("") }
-    var fechaHasta by remember { mutableStateOf("") }
+fun AdminScreen(
+    viewModel: AdminViewModel = hiltViewModel()
+) {
+    val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    // Date picker states
+    var showDesdeDialog by remember { mutableStateOf(false) }
+    var showHastaDialog by remember { mutableStateOf(false) }
+
+    // Dropdown sede
+    var sedeExpanded by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
@@ -115,130 +124,189 @@ fun AdminScreen() {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            // 1. Maestro de Unidades
-            SectionCard(title = "Maestro de Unidades", icon = Icons.Default.Storage) {
-                Column {
-                    // Encabezado tabla
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+            // ── Exportar informe a Google Sheets ────────────────────────────
+            SectionCard(title = "Exportar informe", icon = Icons.Default.TableChart) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                    // Selector de sede (opcional)
+                    ExposedDropdownMenuBox(
+                        expanded         = sedeExpanded,
+                        onExpandedChange = { sedeExpanded = !sedeExpanded }
                     ) {
-                        Text(
-                            text     = "# Unidad",
-                            style    = MaterialTheme.typography.labelMedium,
-                            color    = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.weight(1f)
+                        OutlinedTextField(
+                            value         = state.sedeSeleccionada?.nombre ?: "Todas las sedes",
+                            onValueChange = {},
+                            readOnly      = true,
+                            label         = { Text("Sede") },
+                            trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = sedeExpanded) },
+                            modifier      = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                         )
-                        Text(
-                            text     = "Sede",
-                            style    = MaterialTheme.typography.labelMedium,
-                            color    = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text  = "Acciones",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    UNIDADES.forEachIndexed { idx, unidad ->
-                        UnidadRow(unidad = unidad)
-                        if (idx < UNIDADES.lastIndex) {
-                            HorizontalDivider(
-                                color     = MaterialTheme.colorScheme.outlineVariant,
-                                thickness = 0.5.dp
+                        ExposedDropdownMenu(
+                            expanded         = sedeExpanded,
+                            onDismissRequest = { sedeExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text    = { Text("Todas las sedes") },
+                                onClick = {
+                                    viewModel.onSedeSeleccionada(null)
+                                    sedeExpanded = false
+                                }
                             )
+                            state.sedes.forEach { sede ->
+                                DropdownMenuItem(
+                                    text    = { Text(sede.nombre) },
+                                    onClick = {
+                                        viewModel.onSedeSeleccionada(sede)
+                                        sedeExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick  = {},
-                        modifier = Modifier.align(Alignment.End),
-                        colors   = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Nueva unidad", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
 
-            // 2. Exportar informe
-            SectionCard(title = "Exportar informe", icon = Icons.Default.TableChart) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Fechas con DatePicker
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
-                            value         = fechaDesde,
-                            onValueChange = { fechaDesde = it },
+                            value         = formatDisplayDate(state.fechaDesde),
+                            onValueChange = {},
+                            readOnly      = true,
                             label         = { Text("Desde") },
-                            placeholder   = { Text("dd/mm/aaaa") },
+                            placeholder   = { Text("Seleccionar") },
+                            trailingIcon  = {
+                                Icon(
+                                    Icons.Default.CalendarMonth,
+                                    contentDescription = "Seleccionar fecha",
+                                    modifier = Modifier.clickable { showDesdeDialog = true }
+                                )
+                            },
                             singleLine    = true,
-                            modifier      = Modifier.weight(1f)
+                            modifier      = Modifier
+                                .weight(1f)
+                                .clickable { showDesdeDialog = true }
                         )
                         OutlinedTextField(
-                            value         = fechaHasta,
-                            onValueChange = { fechaHasta = it },
+                            value         = formatDisplayDate(state.fechaHasta),
+                            onValueChange = {},
+                            readOnly      = true,
                             label         = { Text("Hasta") },
-                            placeholder   = { Text("dd/mm/aaaa") },
+                            placeholder   = { Text("Seleccionar") },
+                            trailingIcon  = {
+                                Icon(
+                                    Icons.Default.CalendarMonth,
+                                    contentDescription = "Seleccionar fecha",
+                                    modifier = Modifier.clickable { showHastaDialog = true }
+                                )
+                            },
                             singleLine    = true,
-                            modifier      = Modifier.weight(1f)
+                            modifier      = Modifier
+                                .weight(1f)
+                                .clickable { showHastaDialog = true }
                         )
                     }
+
+                    // Botón generar
                     Button(
-                        onClick  = {},
+                        onClick  = { viewModel.generarInforme() },
+                        enabled  = !state.generando && state.fechaDesde.isNotBlank() && state.fechaHasta.isNotBlank(),
                         modifier = Modifier.fillMaxWidth(),
                         colors   = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
-                        Icon(
-                            imageVector        = Icons.Default.TableChart,
-                            contentDescription = null,
-                            modifier           = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Exportar a Google Sheets")
+                        if (state.generando) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color    = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Generando informe...")
+                        } else {
+                            Icon(
+                                imageVector        = Icons.Default.TableChart,
+                                contentDescription = null,
+                                modifier           = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("Exportar a Google Sheets")
+                        }
                     }
-                    OutlinedButton(
-                        onClick  = {},
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector        = Icons.Default.OpenInNew,
-                            contentDescription = null,
-                            modifier           = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Ver Drive")
-                    }
-                }
-            }
 
-            // 3. Técnicos
-            SectionCard(title = "Técnicos", icon = Icons.Default.Person) {
-                Column {
-                    TECNICOS.forEach { tecnico ->
-                        TecnicoRow(tecnico = tecnico)
+                    // Error
+                    AnimatedVisibility(visible = state.error != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text     = state.error ?: "",
+                                style    = MaterialTheme.typography.bodySmall,
+                                color    = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick  = {},
-                        modifier = Modifier.align(Alignment.End),
-                        colors   = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Agregar técnico", style = MaterialTheme.typography.labelMedium)
+
+                    // Resultado exitoso
+                    AnimatedVisibility(visible = state.exito && state.sheetUrl != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFE8F5E9)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint     = Color(0xFF2E7D32),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text  = "Informe generado",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = Color(0xFF2E7D32)
+                                    )
+                                }
+                                Text(
+                                    text  = "Pestaña: ${state.pestana}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text  = "${state.totalVisitas} visitas exportadas",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+
+                                // Botón abrir en Sheets
+                                OutlinedButton(
+                                    onClick = {
+                                        state.sheetUrl?.let { url ->
+                                            context.startActivity(
+                                                Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        imageVector        = Icons.Default.OpenInNew,
+                                        contentDescription = null,
+                                        modifier           = Modifier.size(16.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Abrir en Google Sheets")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -246,83 +314,79 @@ fun AdminScreen() {
             Spacer(Modifier.height(8.dp))
         }
     }
-}
 
-@Composable
-private fun UnidadRow(unidad: Unidad) {
-    Row(
-        modifier          = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text     = unidad.numero,
-            style    = MaterialTheme.typography.bodySmall,
-            color    = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f)
+    // ── DatePicker Dialogs ───────────────────────────────────────────────────
+
+    if (showDesdeDialog) {
+        DatePickerModal(
+            onDateSelected = { millis ->
+                millis?.let {
+                    viewModel.onFechaDesdeChanged(millisToApiDate(it))
+                }
+                showDesdeDialog = false
+            },
+            onDismiss = { showDesdeDialog = false }
         )
-        Text(
-            text     = unidad.sede,
-            style    = MaterialTheme.typography.bodySmall,
-            color    = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
+    }
+
+    if (showHastaDialog) {
+        DatePickerModal(
+            onDateSelected = { millis ->
+                millis?.let {
+                    viewModel.onFechaHastaChanged(millisToApiDate(it))
+                }
+                showHastaDialog = false
+            },
+            onDismiss = { showHastaDialog = false }
         )
-        Row {
-            IconButton(onClick = {}, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector        = Icons.Default.Edit,
-                    contentDescription = "Editar",
-                    tint               = MaterialTheme.colorScheme.primary,
-                    modifier           = Modifier.size(16.dp)
-                )
-            }
-            IconButton(onClick = {}, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector        = Icons.Default.Delete,
-                    contentDescription = "Eliminar",
-                    tint               = MaterialTheme.colorScheme.error,
-                    modifier           = Modifier.size(16.dp)
-                )
-            }
-        }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TecnicoRow(tecnico: Tecnico) {
-    Row(
-        modifier          = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector        = Icons.Default.Person,
-            contentDescription = null,
-            tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier           = Modifier.size(18.dp)
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text     = tecnico.nombre,
-            style    = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f)
-        )
-        val (chipBg, chipFg) = if (tecnico.rol == "Coordinadora")
-            Color(0xFF1565C0) to Color.White
-        else
-            Color(0xFF4CAF50) to Color.White
-        Surface(
-            color = chipBg,
-            shape = RoundedCornerShape(4.dp)
-        ) {
-            Text(
-                text     = tecnico.rol,
-                style    = MaterialTheme.typography.labelSmall,
-                color    = chipFg,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-            )
+private fun DatePickerModal(
+    onDateSelected: (Long?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val datePickerState = rememberDatePickerState()
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = { onDateSelected(datePickerState.selectedDateMillis) }
+            ) {
+                Text("Aceptar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
         }
+    ) {
+        DatePicker(state = datePickerState)
+    }
+}
+
+/**
+ * Convierte millis UTC a formato "YYYY-MM-DD" para el API.
+ */
+private fun millisToApiDate(millis: Long): String {
+    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    sdf.timeZone = TimeZone.getTimeZone("UTC")
+    return sdf.format(Date(millis))
+}
+
+/**
+ * Convierte "YYYY-MM-DD" a "dd/MM/yyyy" para mostrar al usuario.
+ */
+private fun formatDisplayDate(apiDate: String): String {
+    if (apiDate.isBlank()) return ""
+    return try {
+        val parts = apiDate.split("-")
+        "${parts[2]}/${parts[1]}/${parts[0]}"
+    } catch (_: Exception) {
+        apiDate
     }
 }

@@ -200,28 +200,18 @@ fun LoginScreen(
                 }
             }
 
-            // Registrar primer usuario (solo si aún no existe coordinadora)
-            if (uiState.primerUsuario) {
-                Spacer(Modifier.height(24.dp))
-                OutlinedButton(
-                    onClick  = { navController.navigate(Screen.Register.route) },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape    = RoundedCornerShape(10.dp),
-                    colors   = ButtonDefaults.outlinedButtonColors(contentColor = ElectroGold),
-                    border   = androidx.compose.foundation.BorderStroke(1.dp, ElectroGold)
-                ) {
-                    Text(
-                        text       = "Crear cuenta de coordinadora",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize   = 15.sp
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(24.dp))
+            OutlinedButton(
+                onClick  = { navController.navigate(Screen.Register.route) },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape    = RoundedCornerShape(10.dp),
+                colors   = ButtonDefaults.outlinedButtonColors(contentColor = ElectroGold),
+                border   = androidx.compose.foundation.BorderStroke(1.dp, ElectroGold)
+            ) {
                 Text(
-                    text     = "Aún no hay usuarios registrados en el sistema",
-                    color    = ElectroOnPrimary.copy(alpha = 0.5f),
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center
+                    text       = "Crear cuenta",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize   = 15.sp
                 )
             }
 

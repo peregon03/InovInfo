@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.Electroinova.inovinfo.data.local.SessionManager
 import com.Electroinova.inovinfo.ui.navigation.AppNavigation
 import com.Electroinova.inovinfo.ui.navigation.Screen
 import com.Electroinova.inovinfo.ui.screens.auth.AuthNavEvent
@@ -32,9 +34,12 @@ import com.Electroinova.inovinfo.ui.theme.ElectroGold
 import com.Electroinova.inovinfo.ui.theme.ElectroNavyBlue
 import com.Electroinova.inovinfo.ui.theme.InovInfoTheme
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var sessionManager: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,12 +92,15 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) { authViewModel.checkSesion() }
 
-                val bottomNavItems = listOf(
-                    BottomNavItem(Screen.NuevaVisita, Icons.Default.AddCircle,    "Nueva Visita"),
-                    BottomNavItem(Screen.Historial,   Icons.Default.List,          "Historial"),
-                    BottomNavItem(Screen.Pendientes,  Icons.Default.Notifications, "Pendientes"),
-                    BottomNavItem(Screen.Perfil,      Icons.Default.Person,        "Perfil"),
-                )
+                val bottomNavItems = buildList {
+                    add(BottomNavItem(Screen.NuevaVisita, Icons.Default.AddCircle,    "Nueva Visita"))
+                    add(BottomNavItem(Screen.Historial,   Icons.Default.List,          "Historial"))
+                    add(BottomNavItem(Screen.Pendientes,  Icons.Default.Notifications, "Pendientes"))
+                    if (sessionManager.esCoordinadora()) {
+                        add(BottomNavItem(Screen.Admin, Icons.Default.Settings, "Admin"))
+                    }
+                    add(BottomNavItem(Screen.Perfil,      Icons.Default.Person,        "Perfil"))
+                }
 
                 Scaffold(
                     modifier  = Modifier.fillMaxSize(),

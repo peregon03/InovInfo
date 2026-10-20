@@ -91,7 +91,7 @@ fun RegisterScreen(
                     color      = ElectroGold
                 )
                 Text(
-                    text      = "El primer usuario registrado será coordinadora",
+                    text      = "Todo usuario registrado será coordinadora",
                     fontSize  = 13.sp,
                     color     = ElectroOnPrimary.copy(alpha = 0.65f),
                     textAlign = TextAlign.Center,
@@ -108,7 +108,7 @@ fun RegisterScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
-                            text       = "Datos de la coordinadora",
+                            text       = "Datos del nuevo usuario",
                             fontSize   = 18.sp,
                             fontWeight = FontWeight.SemiBold,
                             color      = ElectroNavyBlue

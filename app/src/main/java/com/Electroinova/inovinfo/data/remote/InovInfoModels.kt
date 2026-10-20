@@ -87,3 +87,19 @@ data class CrearUnidadRequest(
     val numero:  String,
     val sede_id: Int
 )
+
+// ── Informes ────────────────────────────────────────────────────────────────
+
+data class GenerarInformeRequest(
+    val fechaDesde:  String,   // "YYYY-MM-DD"
+    val fechaHasta:  String,   // "YYYY-MM-DD"
+    val sedeId:      Int?    = null,
+    val sedeNombre:  String? = null,
+    val linkFotos:   String? = null
+)
+
+data class InformeResponse(
+    val sheetUrl:      String,
+    val pestana:       String,
+    val totalVisitas:  Int
+)

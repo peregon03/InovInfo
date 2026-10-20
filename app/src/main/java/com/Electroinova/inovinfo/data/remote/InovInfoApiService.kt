@@ -46,4 +46,11 @@ interface InovInfoApiService {
         @Path("id") id: Int,
         @Body request: ActualizarEstadoRequest
     ): Map<String, String>
+
+    // ── Informes ────────────────────────────────────────────────────────────
+    @POST("api/informes/generar")
+    suspend fun generarInforme(
+        @Header("Authorization") token: String,
+        @Body request: GenerarInformeRequest
+    ): InformeResponse
 }
