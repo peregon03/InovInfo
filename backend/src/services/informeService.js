@@ -153,10 +153,10 @@ function construirFilas(visitas, sedeJornada) {
         // Fila principal
         filas.push([fecha, sede, num, actividad, obsTexto]);
 
-        // Filas de suministros
+        // Filas de suministros (formato: "Sum Nombre del suministro")
         for (const s of suministros) {
-            const cantidad = (s.cantidad && s.cantidad > 1) ? ` (x${s.cantidad})` : '';
-            filas.push(['', '', '', '', `${s.nombre}${cantidad}`]);
+            const cantidad = (s.cantidad && s.cantidad > 1) ? ` x${s.cantidad}` : '';
+            filas.push(['', '', '', '', `Sum ${s.nombre}${cantidad}`]);
         }
 
         const endRow = filas.length - 1;

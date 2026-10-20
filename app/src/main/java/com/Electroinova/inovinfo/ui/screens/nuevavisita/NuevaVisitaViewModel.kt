@@ -354,28 +354,37 @@ class NuevaVisitaViewModel @Inject constructor(
         suministros:  Set<String>
     ): String {
         val suministrosTexto = if (suministros.isNotEmpty())
-            "Se instalaron/suministraron: ${suministros.joinToString(", ")}."
+            "\nSuministros utilizados: ${suministros.joinToString(", ")}."
         else ""
         return """
-Eres el asistente de redacción técnica de Electroinova Soluciones, empresa de rastreo vehicular.
-El técnico ya realizó la visita a la unidad $numeroUnidad y describe lo que encontró con sus propias palabras.
-Tu tarea es convertir esa descripción informal en una observación técnica formal para un informe oficial.
+Eres el redactor técnico de Electroinova SAS. Redactas informes de mantenimiento de DVR Móvil (sistema de cámaras en buses).
 
-REGLAS ESTRICTAS:
-- Usa voz pasiva impersonal: "Se evidenció...", "Se verificó...", "Se realizó...", "Se constató..."
-- Tiempo pasado — la visita YA ocurrió
-- Menciona los componentes específicos que el técnico nombró (cámaras, GPS, batería, DVR, etc.)
-- Si el técnico realizó una acción correctiva, inclúyela como un hecho: "Se reemplazó...", "Se reconectó..."
-- Si quedó algo sin resolver, escribe "Queda pendiente..." — NUNCA sugieras buscar otro especialista
-- El técnico ES el especialista; no uses frases como "se recomienda revisión especializada"
-- Estado reportado: $estado
-- $suministrosTexto
-- Máximo 3 oraciones. Sin saludo, sin cierre, sin guiones, solo el párrafo técnico.
+TEXTO BASE que siempre inicia la observación cuando hay servicio ejecutado:
+"Se ejecutó el servicio de revisión, diagnóstico técnico, ajuste, reparación, mantenimiento general y limpieza del sistema de cámaras"
 
-DESCRIPCIÓN DEL TÉCNICO:
+REGLAS DE REDACCIÓN:
+1. Tercera persona, tiempo pasado, tono técnico formal. Sin punto final en la celda.
+2. Si NO hay novedad (estado OK): devuelve SOLO el texto base, tal cual, sin modificarlo.
+3. Si HAY hallazgo: al texto base se agrega tras una coma: ", durante la inspección se encuentra [hallazgo]" o ", durante la inspección se evidencia [hallazgo]".
+   Ejemplo real: "Se ejecutó el servicio de revisión, diagnóstico técnico, ajuste, reparación, mantenimiento general y limpieza del sistema de cámaras, durante la inspección se encuentra visor fracturado"
+4. Si la visita fue a solicitud de mantenimiento: "A solicitud del área de mantenimiento se realiza visita, encontrándose [hallazgo y causa si se conoce]".
+5. Si se hizo acción correctiva, agregarla como hecho: "se ajustan conexiones", "se realiza cambio de este porque presentaba mala imagen".
+6. Si hay causa del hallazgo (manipulación, inversión de conexiones, intervención eléctrica, deterioro), describir de forma objetiva. NUNCA culpar personas ni usar lenguaje coloquial.
+7. El técnico ES el especialista — NUNCA sugieras "revisión especializada" ni "se recomienda consultar".
+8. Si quedó algo sin resolver, escribir "Queda pendiente [qué]".
+9. Sin saludo, sin cierre, sin guiones, sin listas. Solo el párrafo técnico continuo.
+10. Sin punto final.
+11. Ortografía correcta: "visita" (no "vista"), "imagen", "deterioro", "limpieza", "encontraron".
+12. Máximo 2-3 oraciones unidas por comas o puntos seguidos.
+
+DATOS DE ESTA VISITA:
+- Unidad: $numeroUnidad
+- Estado reportado: $estado$suministrosTexto
+
+DESCRIPCIÓN INFORMAL DEL TÉCNICO:
 "$novedadLibre"
 
-OBSERVACIÓN TÉCNICA FORMAL:
+Reescribe la descripción del técnico aplicando las reglas. Devuelve SOLO el texto de la observación, nada más:
         """.trimIndent()
     }
 }

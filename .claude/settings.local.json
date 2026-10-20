@@ -3,7 +3,9 @@
     "allow": [
       "Bash(find 'D:\\\\Michael\\\\Electroinova\\\\Desarrollos app\\\\InovInfo' -name *.env* -o -name .env*)",
       "Bash(npm install:*)",
-      "Bash(./gradlew assembleDebug)"
+      "Bash(./gradlew assembleDebug)",
+      "Bash(node -e \":*)",
+      "Bash(node:*)"
     ]
   }
 }
