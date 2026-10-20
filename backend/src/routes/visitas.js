@@ -82,7 +82,7 @@ router.get('/hoy', async (req, res) => {
             JOIN sedes s           ON un.sede_id   = s.id
             JOIN estados_visita ev ON v.estado_id  = ev.id
             JOIN usuarios u2       ON v.tecnico_id = u2.id
-            WHERE DATE(v.created_at) = CURRENT_DATE
+            WHERE DATE(v.created_at AT TIME ZONE 'America/Bogota') = (NOW() AT TIME ZONE 'America/Bogota')::date
             ${verTodas ? '' : 'AND v.tecnico_id = $1'}
             ORDER BY v.created_at DESC
         `;
@@ -108,8 +108,8 @@ router.get('/pendientes', async (req, res) => {
                    v.fecha_seguimiento, v.nota_seguimiento,
                    u2.nombre AS tecnico_nombre,
                    CASE
-                       WHEN v.fecha_seguimiento < CURRENT_DATE THEN 'vencido'
-                       WHEN v.fecha_seguimiento = CURRENT_DATE THEN 'hoy'
+                       WHEN v.fecha_seguimiento < (NOW() AT TIME ZONE 'America/Bogota')::date THEN 'vencido'
+                       WHEN v.fecha_seguimiento = (NOW() AT TIME ZONE 'America/Bogota')::date THEN 'hoy'
                        ELSE 'futuro'
                    END AS urgencia
             FROM visitas v
@@ -191,16 +191,21 @@ router.post('/:id/fotos', upload.single('foto'), async (req, res) => {
     }
 
     try {
-        // Verificar que la visita existe y pertenece al técnico (o es coordinadora)
+        // Verificar que la visita existe, obtener sede y verificar permisos
         const visitaCheck = await pool.query(
-            'SELECT id, tecnico_id FROM visitas WHERE id = $1',
+            `SELECT v.id, v.tecnico_id, s.nombre AS sede_nombre
+             FROM visitas v
+             JOIN unidades u ON v.unidad_id = u.id
+             JOIN sedes s    ON u.sede_id   = s.id
+             WHERE v.id = $1`,
             [visitaId]
         );
         if (visitaCheck.rows.length === 0) {
             return res.status(404).json({ error: 'Visita no encontrada' });
         }
+        const visita         = visitaCheck.rows[0];
         const esCoordinadora = req.usuario.rol === 'coordinadora';
-        const esDueno        = visitaCheck.rows[0].tecnico_id === req.usuario.id;
+        const esDueno        = visita.tecnico_id === req.usuario.id;
         if (!esCoordinadora && !esDueno) {
             return res.status(403).json({ error: 'Sin permiso para esta visita' });
         }
@@ -212,9 +217,9 @@ router.post('/:id/fotos', upload.single('foto'), async (req, res) => {
         );
         const orden = ordenRes.rows[0].siguiente;
 
-        // Subir a Google Drive
+        // Subir a Google Drive (organizado en /año/sede/)
         const fileName = `visita_${visitaId}_foto_${orden}_${Date.now()}.jpg`;
-        const url      = await subirFotoDrive(req.file.buffer, fileName, req.file.mimetype);
+        const url      = await subirFotoDrive(req.file.buffer, fileName, req.file.mimetype, visita.sede_nombre);
 
         // Guardar URL en la base de datos
         const insertRes = await pool.query(

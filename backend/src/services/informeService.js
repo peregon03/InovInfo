@@ -17,10 +17,12 @@ const MESES_LARGO = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','A
  * Formatea una fecha Date a dd/MM/yyyy
  */
 function formatFecha(date) {
+    // Convertir a hora Colombia (UTC-5)
     const d = new Date(date);
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yyyy = d.getFullYear();
+    const col = new Date(d.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+    const dd = String(col.getDate()).padStart(2, '0');
+    const mm = String(col.getMonth() + 1).padStart(2, '0');
+    const yyyy = col.getFullYear();
     return `${dd}/${mm}/${yyyy}`;
 }
 
@@ -105,8 +107,8 @@ async function consultarVisitas(fechaDesde, fechaHasta, sedeId) {
         JOIN usuarios u2        ON v.tecnico_id = u2.id
         LEFT JOIN visita_suministros vs ON v.id = vs.visita_id
         LEFT JOIN suministros sm        ON vs.suministro_id = sm.id
-        WHERE DATE(v.created_at) >= $1
-          AND DATE(v.created_at) <= $2
+        WHERE DATE(v.created_at AT TIME ZONE 'America/Bogota') >= $1
+          AND DATE(v.created_at AT TIME ZONE 'America/Bogota') <= $2
           ${filtroSede}
         GROUP BY v.id, un.numero, s.nombre, s.id, ev.nombre, u2.nombre
         ORDER BY s.nombre, un.numero, v.created_at

@@ -623,7 +623,7 @@ fun AdminScreen(
                     }
 
                     // Error del informe
-                    AnimatedVisibility(visible = state.error != null && state.generando) {
+                    AnimatedVisibility(visible = state.error != null && !state.generando) {
                         Card(
                             colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                             modifier = Modifier.fillMaxWidth()

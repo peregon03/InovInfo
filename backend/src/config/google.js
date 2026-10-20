@@ -41,16 +41,57 @@ function getDriveClient() {
 }
 
 /**
- * Sube un archivo a Google Drive y lo hace públicamente accesible.
+ * Busca una subcarpeta por nombre dentro de un padre.
+ * Si no existe, la crea. Devuelve el ID de la carpeta.
+ */
+async function obtenerOCrearCarpeta(drive, nombre, parentId) {
+    // Buscar carpeta existente
+    const busqueda = await drive.files.list({
+        q: `name='${nombre}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive',
+    });
+
+    if (busqueda.data.files.length > 0) {
+        return busqueda.data.files[0].id;
+    }
+
+    // Crear carpeta
+    const res = await drive.files.create({
+        requestBody: {
+            name:     nombre,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents:  [parentId],
+        },
+        fields: 'id',
+    });
+    return res.data.id;
+}
+
+/**
+ * Sube un archivo a Google Drive organizado en subcarpetas: /año/sede/
  *
  * @param {Buffer} fileBuffer  - Contenido del archivo en memoria
  * @param {string} fileName    - Nombre del archivo a crear en Drive
  * @param {string} mimeType    - Tipo MIME (ej. "image/jpeg")
+ * @param {string} [sedeNombre] - Nombre de la sede (para subcarpeta)
  * @returns {Promise<string>}  - URL pública: https://drive.google.com/uc?id=<fileId>
  */
-async function subirFotoDrive(fileBuffer, fileName, mimeType) {
+async function subirFotoDrive(fileBuffer, fileName, mimeType, sedeNombre) {
     const drive    = getDriveClient();
-    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    const rootId   = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
+    // Determinar carpeta destino: raíz → año → sede
+    let targetFolder = rootId || null;
+    if (rootId) {
+        const anio = new Date().getFullYear().toString();
+        const carpetaAnio = await obtenerOCrearCarpeta(drive, anio, rootId);
+        if (sedeNombre) {
+            targetFolder = await obtenerOCrearCarpeta(drive, sedeNombre, carpetaAnio);
+        } else {
+            targetFolder = carpetaAnio;
+        }
+    }
 
     const { Readable } = require('stream');
     const stream = Readable.from(fileBuffer);
@@ -59,7 +100,7 @@ async function subirFotoDrive(fileBuffer, fileName, mimeType) {
     const fileRes = await drive.files.create({
         requestBody: {
             name:    fileName,
-            parents: folderId ? [folderId] : [],
+            parents: targetFolder ? [targetFolder] : [],
         },
         media: {
             mimeType,

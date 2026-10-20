@@ -1,9 +1,12 @@
 package com.Electroinova.inovinfo.ui.screens.nuevavisita
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -70,6 +73,20 @@ fun NuevaVisitaScreen(
         contract = ActivityResultContracts.TakePicture()
     ) { exito ->
         if (exito) uriCamaraTemporal?.let { viewModel.onFotoAgregada(it) }
+    }
+
+    // Helper para abrir cámara (crea URI temporal y lanza)
+    val lanzarCamara = {
+        val uri = crearUriTemporal(context)
+        uriCamaraTemporal = uri
+        camaraLauncher.launch(uri)
+    }
+
+    // Launcher: solicitar permiso de cámara en runtime
+    val permisosCamaraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { concedido ->
+        if (concedido) lanzarCamara()
     }
 
     val hoy = LocalDate.now().format(
@@ -546,9 +563,11 @@ fun NuevaVisitaScreen(
             confirmButton = {
                 Button(onClick = {
                     mostrarDialogoFoto = false
-                    val uri = crearUriTemporal(context)
-                    uriCamaraTemporal = uri
-                    camaraLauncher.launch(uri)
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                        lanzarCamara()
+                    } else {
+                        permisosCamaraLauncher.launch(Manifest.permission.CAMERA)
+                    }
                 }) {
                     Icon(Icons.Default.CameraAlt, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
