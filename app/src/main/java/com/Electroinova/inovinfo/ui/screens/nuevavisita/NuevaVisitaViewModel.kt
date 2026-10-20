@@ -36,6 +36,10 @@ data class NuevaVisitaUiState(
     val catalogosLoading:   Boolean             = true,
     val errorCatalogos:     String?             = null,
 
+    // Búsqueda/filtro de unidades
+    val busquedaUnidad:  String      = "",
+    val filtroSedeId:    Int?        = null,
+
     // Formulario
     val unidadSeleccionada:      UnidadDto?  = null,
     val estadoSeleccionado:      EstadoDto?  = null,
@@ -123,8 +127,29 @@ class NuevaVisitaViewModel @Inject constructor(
 
     // ── Actualizaciones de campos ─────────────────────────────────────────────
 
+    fun onBusquedaUnidadChange(query: String) =
+        _uiState.update { it.copy(busquedaUnidad = query) }
+
+    fun onFiltroSedeChange(sedeId: Int?) =
+        _uiState.update { it.copy(filtroSedeId = sedeId) }
+
+    fun unidadesFiltradas(): List<UnidadDto> {
+        val state = _uiState.value
+        val query = state.busquedaUnidad.trim().lowercase()
+        return state.unidades.filter { u ->
+            val coincideSede = state.filtroSedeId == null || u.sede_id == state.filtroSedeId
+            val coincideBusqueda = query.isBlank() ||
+                u.numero.lowercase().contains(query) ||
+                u.sede_nombre.lowercase().contains(query)
+            coincideSede && coincideBusqueda
+        }
+    }
+
+    fun onObservacionChange(value: String) =
+        _uiState.update { it.copy(observacion = value) }
+
     fun onUnidadSelect(unidad: UnidadDto) =
-        _uiState.update { it.copy(unidadSeleccionada = unidad) }
+        _uiState.update { it.copy(unidadSeleccionada = unidad, busquedaUnidad = "") }
 
     fun onEstadoSelect(estado: EstadoDto) {
         _uiState.update { it.copy(estadoSeleccionado = estado) }

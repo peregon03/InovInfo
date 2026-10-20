@@ -20,11 +20,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -36,7 +42,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
@@ -46,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,7 +68,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.Electroinova.inovinfo.data.remote.SedeDto
 import com.Electroinova.inovinfo.ui.components.SectionCard
+import com.Electroinova.inovinfo.ui.theme.ElectroNavyBlue
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -77,8 +88,20 @@ fun AdminScreen(
     var showDesdeDialog by remember { mutableStateOf(false) }
     var showHastaDialog by remember { mutableStateOf(false) }
 
-    // Dropdown sede
+    // Diálogos gestión de sedes
+    var showCrearSedeDialog  by remember { mutableStateOf(false) }
+    var sedeParaEditar       by remember { mutableStateOf<SedeDto?>(null) }
+
+    // Dropdown sede (filtro informe)
     var sedeExpanded by remember { mutableStateOf(false) }
+
+    // Auto-limpiar mensaje de éxito
+    if (state.mensajeExito != null) {
+        LaunchedEffect(state.mensajeExito) {
+            kotlinx.coroutines.delay(3000)
+            viewModel.limpiarMensaje()
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
@@ -311,8 +334,162 @@ fun AdminScreen(
                 }
             }
 
+            // ── Mensajes éxito/error de gestión ─────────────────────────────
+            AnimatedVisibility(visible = state.mensajeExito != null) {
+                Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFE8F5E9)) {
+                    Row(
+                        modifier          = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(state.mensajeExito ?: "", color = Color(0xFF2E7D32), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            // ── Gestión de sedes ─────────────────────────────────────────────
+            SectionCard(title = "Bases operativas (sedes)", icon = Icons.Default.LocationOn) {
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "Sedes registradas",
+                            style    = MaterialTheme.typography.labelMedium,
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (state.sedesLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            IconButton(onClick = { viewModel.cargarSedes() }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+
+                    if (state.sedes.isEmpty() && !state.sedesLoading) {
+                        Text(
+                            "Sin sedes registradas",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        state.sedes.forEach { sede ->
+                            Row(
+                                modifier          = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(sede.nombre, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                IconButton(
+                                    onClick  = { sedeParaEditar = sede },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Editar sede", modifier = Modifier.size(16.dp), tint = ElectroNavyBlue)
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick  = { showCrearSedeDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors   = ButtonDefaults.buttonColors(containerColor = ElectroNavyBlue)
+                    ) {
+                        Icon(Icons.Default.Add, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Agregar sede")
+                    }
+                }
+            }
+
+            // ── Tabla maestra de unidades ─────────────────────────────────────
+            SectionCard(title = "Flota de unidades", icon = Icons.Default.DirectionsCar) {
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "${state.unidades.size} unidades registradas",
+                            style    = MaterialTheme.typography.labelMedium,
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (state.unidadesLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            IconButton(onClick = { viewModel.cargarUnidades() }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+
+                    if (state.unidades.isEmpty() && !state.unidadesLoading) {
+                        Text(
+                            "Sin unidades registradas. Agrégalas desde el Perfil.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        state.unidades.take(8).forEach { u ->
+                            Row(
+                                modifier          = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "Unidad ${u.numero}",
+                                    style    = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    u.sede_nombre,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+                        }
+                        if (state.unidades.size > 8) {
+                            Text(
+                                "+ ${state.unidades.size - 8} más",
+                                style    = MaterialTheme.typography.bodySmall,
+                                color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(8.dp))
         }
+    }
+
+    // ── Diálogo: Crear sede ──────────────────────────────────────────────────
+    if (showCrearSedeDialog) {
+        CrearSedeDialog(
+            isLoading = state.crearSedeLoading,
+            onDismiss = { showCrearSedeDialog = false },
+            onCrear   = { nombre ->
+                viewModel.crearSede(nombre)
+                showCrearSedeDialog = false
+            }
+        )
+    }
+
+    // ── Diálogo: Editar sede ─────────────────────────────────────────────────
+    sedeParaEditar?.let { sede ->
+        EditarSedeDialog(
+            sede      = sede,
+            onDismiss = { sedeParaEditar = null },
+            onGuardar = { nuevoNombre ->
+                viewModel.actualizarSede(sede.id, nuevoNombre)
+                sedeParaEditar = null
+            }
+        )
     }
 
     // ── DatePicker Dialogs ───────────────────────────────────────────────────
@@ -340,6 +517,81 @@ fun AdminScreen(
             onDismiss = { showHastaDialog = false }
         )
     }
+}
+
+@Composable
+private fun CrearSedeDialog(
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onCrear:   (nombre: String) -> Unit
+) {
+    var nombre by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nueva sede", fontWeight = FontWeight.Bold) },
+        text = {
+            OutlinedTextField(
+                value         = nombre,
+                onValueChange = { nombre = it },
+                label         = { Text("Nombre de la sede") },
+                placeholder   = { Text("Ej: Bogotá Norte") },
+                singleLine    = true,
+                modifier      = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick  = { onCrear(nombre) },
+                enabled  = !isLoading && nombre.isNotBlank(),
+                colors   = ButtonDefaults.buttonColors(containerColor = ElectroNavyBlue)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Text("Crear")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
+private fun EditarSedeDialog(
+    sede:      SedeDto,
+    onDismiss: () -> Unit,
+    onGuardar: (nombre: String) -> Unit
+) {
+    var nombre by remember { mutableStateOf(sede.nombre) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Editar sede", fontWeight = FontWeight.Bold) },
+        text = {
+            OutlinedTextField(
+                value         = nombre,
+                onValueChange = { nombre = it },
+                label         = { Text("Nombre de la sede") },
+                singleLine    = true,
+                modifier      = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick  = { onGuardar(nombre) },
+                enabled  = nombre.isNotBlank(),
+                colors   = ButtonDefaults.buttonColors(containerColor = ElectroNavyBlue)
+            ) {
+                Text("Guardar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

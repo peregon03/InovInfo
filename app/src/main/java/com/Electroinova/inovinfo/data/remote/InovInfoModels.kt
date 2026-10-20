@@ -88,6 +88,10 @@ data class CrearUnidadRequest(
     val sede_id: Int
 )
 
+data class CrearSedeRequest(val nombre: String)
+
+data class ActualizarSedeRequest(val nombre: String, val activa: Boolean)
+
 // ── Informes ────────────────────────────────────────────────────────────────
 
 data class GenerarInformeRequest(

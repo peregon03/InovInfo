@@ -2,6 +2,8 @@ package com.Electroinova.inovinfo.ui.screens.nuevavisita
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,8 +37,9 @@ fun NuevaVisitaScreen(
     viewModel: NuevaVisitaViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var unidadExpanded     by remember { mutableStateOf(false) }
+    var unidadExpanded      by remember { mutableStateOf(false) }
     var suministrosExpanded by remember { mutableStateOf(false) }
+    var mostrarDialogoObservacion by remember { mutableStateOf(false) }
 
     val hoy = LocalDate.now().format(
         DateTimeFormatter.ofPattern("d MMM yyyy", Locale("es", "CO"))
@@ -185,30 +188,58 @@ fun NuevaVisitaScreen(
                 }
 
                 // 1. Seleccionar unidad
+                val sedesUnicas = remember(uiState.unidades) {
+                    uiState.unidades.map { it.sede_id to it.sede_nombre }.distinctBy { it.first }
+                }
+                val unidadesFiltradas = remember(uiState.busquedaUnidad, uiState.filtroSedeId, uiState.unidades) {
+                    viewModel.unidadesFiltradas()
+                }
+
+                // Filtro por sede
+                if (sedesUnicas.size > 1) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        item {
+                            FilterChip(
+                                selected = uiState.filtroSedeId == null,
+                                onClick  = { viewModel.onFiltroSedeChange(null) },
+                                label    = { Text("Todas", style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                        items(sedesUnicas) { (id, nombre) ->
+                            FilterChip(
+                                selected = uiState.filtroSedeId == id,
+                                onClick  = { viewModel.onFiltroSedeChange(id) },
+                                label    = { Text(nombre, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+                }
+
                 ExposedDropdownMenuBox(
                     expanded         = unidadExpanded,
                     onExpandedChange = { unidadExpanded = it }
                 ) {
                     OutlinedTextField(
-                        value         = uiState.unidadSeleccionada?.let { "Unidad ${it.numero} · ${it.sede_nombre}" } ?: "",
-                        onValueChange = {},
-                        readOnly      = true,
+                        value         = if (unidadExpanded) uiState.busquedaUnidad
+                                        else uiState.unidadSeleccionada?.let { "Unidad ${it.numero} · ${it.sede_nombre}" } ?: "",
+                        onValueChange = { viewModel.onBusquedaUnidadChange(it) },
                         label         = { Text("Unidad") },
-                        placeholder   = { Text("Selecciona una unidad") },
+                        placeholder   = { Text("Buscar por número o sede...") },
                         trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = unidadExpanded) },
-                        modifier      = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        singleLine    = true,
+                        modifier      = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable)
                     )
                     ExposedDropdownMenu(
                         expanded         = unidadExpanded,
                         onDismissRequest = { unidadExpanded = false }
                     ) {
-                        if (uiState.unidades.isEmpty()) {
+                        if (unidadesFiltradas.isEmpty()) {
                             DropdownMenuItem(
-                                text    = { Text("Sin unidades registradas", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                text    = { Text("Sin resultados", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                 onClick = {}
                             )
                         } else {
-                            uiState.unidades.forEach { unidad ->
+                            unidadesFiltradas.forEach { unidad ->
                                 DropdownMenuItem(
                                     text    = { Text("${unidad.numero} · ${unidad.sede_nombre}") },
                                     onClick = { viewModel.onUnidadSelect(unidad); unidadExpanded = false }
@@ -302,7 +333,7 @@ fun NuevaVisitaScreen(
                     ) {
                         Box(modifier = Modifier.padding(12.dp)) {
                             Text(uiState.observacion, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(end = 60.dp))
-                            TextButton(onClick = {}, modifier = Modifier.align(Alignment.TopEnd)) {
+                            TextButton(onClick = { mostrarDialogoObservacion = true }, modifier = Modifier.align(Alignment.TopEnd)) {
                                 Icon(Icons.Default.Edit, null, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(2.dp))
                                 Text("Editar", style = MaterialTheme.typography.labelSmall)
@@ -451,4 +482,51 @@ fun NuevaVisitaScreen(
             }
         }
     }
+
+    // ── Diálogo: Editar observación ──────────────────────────────────────────
+    if (mostrarDialogoObservacion) {
+        EditarObservacionDialog(
+            textoInicial = uiState.observacion,
+            onDismiss    = { mostrarDialogoObservacion = false },
+            onGuardar    = { nuevoTexto ->
+                viewModel.onObservacionChange(nuevoTexto)
+                mostrarDialogoObservacion = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun EditarObservacionDialog(
+    textoInicial: String,
+    onDismiss:    () -> Unit,
+    onGuardar:    (String) -> Unit
+) {
+    var texto by remember { mutableStateOf(textoInicial) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Editar observación", fontWeight = FontWeight.SemiBold) },
+        text = {
+            OutlinedTextField(
+                value         = texto,
+                onValueChange = { texto = it },
+                label         = { Text("Observación estructurada") },
+                minLines      = 5,
+                maxLines      = 10,
+                modifier      = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick  = { onGuardar(texto) },
+                enabled  = texto.isNotBlank()
+            ) {
+                Text("Guardar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
 }

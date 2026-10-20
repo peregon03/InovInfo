@@ -3,9 +3,12 @@ package com.Electroinova.inovinfo.ui.screens.admin
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.Electroinova.inovinfo.data.local.SessionManager
+import com.Electroinova.inovinfo.data.remote.ActualizarSedeRequest
+import com.Electroinova.inovinfo.data.remote.CrearSedeRequest
 import com.Electroinova.inovinfo.data.remote.GenerarInformeRequest
 import com.Electroinova.inovinfo.data.remote.InovInfoApiService
 import com.Electroinova.inovinfo.data.remote.SedeDto
+import com.Electroinova.inovinfo.data.remote.UnidadDto
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +21,12 @@ data class AdminUiState(
     // Sedes
     val sedes: List<SedeDto> = emptyList(),
     val sedeSeleccionada: SedeDto? = null,
+    val sedesLoading: Boolean = false,
+    val crearSedeLoading: Boolean = false,
+
+    // Unidades
+    val unidades: List<UnidadDto> = emptyList(),
+    val unidadesLoading: Boolean = false,
 
     // Fechas (formato "YYYY-MM-DD")
     val fechaDesde: String = "",
@@ -29,7 +38,10 @@ data class AdminUiState(
     val pestana: String? = null,
     val totalVisitas: Int? = null,
     val error: String? = null,
-    val exito: Boolean = false
+    val exito: Boolean = false,
+
+    // Mensajes gestión catálogos
+    val mensajeExito: String? = null
 )
 
 @HiltViewModel
@@ -43,19 +55,76 @@ class AdminViewModel @Inject constructor(
 
     init {
         cargarSedes()
+        cargarUnidades()
     }
 
-    private fun cargarSedes() {
+    fun cargarSedes() {
         viewModelScope.launch {
+            _uiState.update { it.copy(sedesLoading = true) }
             try {
                 val token = sessionManager.bearerToken()
                 val sedes = apiService.getSedes(token)
-                _uiState.update { it.copy(sedes = sedes) }
+                _uiState.update { it.copy(sedes = sedes, sedesLoading = false) }
             } catch (e: Exception) {
-                // Sedes no críticas, se puede usar sin filtrar
+                _uiState.update { it.copy(sedesLoading = false) }
             }
         }
     }
+
+    fun cargarUnidades() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(unidadesLoading = true) }
+            try {
+                val token    = sessionManager.bearerToken()
+                val unidades = apiService.getUnidades(token)
+                _uiState.update { it.copy(unidades = unidades, unidadesLoading = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(unidadesLoading = false) }
+            }
+        }
+    }
+
+    fun crearSede(nombre: String) {
+        if (nombre.isBlank()) {
+            _uiState.update { it.copy(error = "El nombre de la sede es requerido") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(crearSedeLoading = true, error = null) }
+            try {
+                val token = sessionManager.bearerToken()
+                apiService.crearSede(token, CrearSedeRequest(nombre.trim()))
+                _uiState.update { it.copy(crearSedeLoading = false, mensajeExito = "Sede '${nombre.trim()}' creada correctamente") }
+                cargarSedes()
+            } catch (e: retrofit2.HttpException) {
+                val msg = if (e.code() == 409) "Ya existe una sede con ese nombre" else "Error al crear la sede"
+                _uiState.update { it.copy(crearSedeLoading = false, error = msg) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(crearSedeLoading = false, error = "Sin conexión al servidor") }
+            }
+        }
+    }
+
+    fun actualizarSede(id: Int, nombre: String) {
+        if (nombre.isBlank()) {
+            _uiState.update { it.copy(error = "El nombre no puede estar vacío") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(error = null) }
+            try {
+                val token = sessionManager.bearerToken()
+                apiService.actualizarSede(token, id, ActualizarSedeRequest(nombre.trim(), activa = true))
+                _uiState.update { it.copy(mensajeExito = "Sede actualizada correctamente") }
+                cargarSedes()
+                cargarUnidades()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "No se pudo actualizar la sede") }
+            }
+        }
+    }
+
+    fun limpiarMensaje() = _uiState.update { it.copy(mensajeExito = null, error = null) }
 
     fun onSedeSeleccionada(sede: SedeDto?) {
         _uiState.update { it.copy(sedeSeleccionada = sede) }

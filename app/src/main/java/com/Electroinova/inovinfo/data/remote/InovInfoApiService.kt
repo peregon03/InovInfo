@@ -36,6 +36,19 @@ interface InovInfoApiService {
         @Body request: CrearUnidadRequest
     ): UnidadDto
 
+    @POST("api/catalogos/sedes")
+    suspend fun crearSede(
+        @Header("Authorization") token: String,
+        @Body request: CrearSedeRequest
+    ): SedeDto
+
+    @PUT("api/catalogos/sedes/{id}")
+    suspend fun actualizarSede(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int,
+        @Body request: ActualizarSedeRequest
+    ): SedeDto
+
     // ── Usuarios (coordinadora) ───────────────────────────────────────────────
     @GET("api/usuarios")
     suspend fun getUsuarios(@Header("Authorization") token: String): List<UsuarioAdminDto>

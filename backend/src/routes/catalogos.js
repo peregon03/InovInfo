@@ -14,6 +14,35 @@ router.get('/sedes', async (req, res) => {
     }
 });
 
+router.post('/sedes', coordinadoraOPermiso('EDITAR_CATALOGOS'), async (req, res) => {
+    const { nombre } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    try {
+        const result = await pool.query(
+            'INSERT INTO sedes (nombre) VALUES ($1) RETURNING *',
+            [nombre]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') return res.status(409).json({ error: 'Sede ya existe' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.put('/sedes/:id', coordinadoraOPermiso('EDITAR_CATALOGOS'), async (req, res) => {
+    const { nombre, activa } = req.body;
+    try {
+        const result = await pool.query(
+            'UPDATE sedes SET nombre=$1, activa=$2 WHERE id=$3 RETURNING *',
+            [nombre, activa, req.params.id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Sede no encontrada' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ── UNIDADES ──────────────────────────────────────────────────────────────────
 router.get('/unidades', async (req, res) => {
     try {
