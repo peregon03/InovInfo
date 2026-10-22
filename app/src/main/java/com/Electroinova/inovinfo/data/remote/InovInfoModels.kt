@@ -44,8 +44,10 @@ data class CrearVisitaRequest(
 // Respuesta de /api/visitas/hoy
 data class VisitaHoyDto(
     val id:                       Int,
+    val unidad_id:                Int    = 0,
     val unidad_numero:            String,
     val sede_nombre:              String,
+    val sede_id:                  Int    = 0,
     val estado:                   String,
     val color_hex:                String,
     val tecnico_nombre:           String,
@@ -56,6 +58,7 @@ data class VisitaHoyDto(
 // Respuesta de /api/visitas/pendientes
 data class PendienteDto(
     val id:               Int,
+    val unidad_id:        Int    = 0,
     val unidad_numero:    String,
     val sede_nombre:      String,
     val fecha_seguimiento: String,
@@ -111,6 +114,31 @@ data class ActualizarSuministroRequest(
     val categoria:  String?,
     val precio_ref: Double?,
     val activo:     Boolean
+)
+
+// ── Consulta de historial por unidad ──────────────────────────────────────────
+
+data class VisitaCompletaDto(
+    val id:                       Int,
+    val created_at:               String,
+    val unidad_id:                Int                    = 0,
+    val unidad_numero:            String,
+    val sede_nombre:              String,
+    val estado:                   String,
+    val color_hex:                String,
+    val tecnico_nombre:           String,
+    val novedad_texto:            String?                = null,
+    val observacion_estructurada: String?                = null,
+    val requiere_seguimiento:     Boolean                = false,
+    val fecha_seguimiento:        String?                = null,
+    val nota_seguimiento:         String?                = null,
+    val suministros:              List<SuministroVisitaDto> = emptyList(),
+    val fotos:                    List<String>           = emptyList()
+)
+
+data class SuministroVisitaDto(
+    val nombre:   String,
+    val cantidad: Int = 1
 )
 
 // ── Fotos ─────────────────────────────────────────────────────────────────────

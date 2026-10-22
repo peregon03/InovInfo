@@ -63,6 +63,17 @@ data class NuevaVisitaUiState(
     // Rol
     val esCoordinadora: Boolean = false,
 
+    // Progreso del día
+    val visitasHoy:          List<VisitaHoyDto>  = emptyList(),
+    val sedeDetectada:       String?             = null,
+    val sedeDetectadaId:     Int?                = null,
+    val unidadesSede:        List<UnidadDto>     = emptyList(),
+    val unidadesRevisadas:   Set<String>         = emptySet(),
+
+    // Seguimiento pendiente de la unidad seleccionada
+    val seguimientoPendiente: PendienteDto?      = null,
+    val pendientes:           List<PendienteDto> = emptyList(),
+
     // Guardado
     val guardando:        Boolean = false,
     val guardadoExitoso:  Boolean = false,
@@ -125,6 +136,7 @@ class NuevaVisitaViewModel @Inject constructor(
                         catalogosLoading    = false
                     )
                 }
+                cargarProgresoHoy()
             } catch (e: Exception) {
                 Log.e(TAG, "Error cargando catálogos: ${e.javaClass.simpleName} - ${e.message}", e)
                 val msg = when (e) {
@@ -161,8 +173,60 @@ class NuevaVisitaViewModel @Inject constructor(
     fun onObservacionChange(value: String) =
         _uiState.update { it.copy(observacion = value) }
 
-    fun onUnidadSelect(unidad: UnidadDto) =
-        _uiState.update { it.copy(unidadSeleccionada = unidad, busquedaUnidad = "") }
+    fun onUnidadSelect(unidad: UnidadDto) {
+        val pendiente = _uiState.value.pendientes.firstOrNull { it.unidad_id == unidad.id }
+        _uiState.update {
+            it.copy(
+                unidadSeleccionada   = unidad,
+                busquedaUnidad       = "",
+                seguimientoPendiente = pendiente,
+                sedeDetectada        = it.sedeDetectada ?: unidad.sede_nombre,
+                sedeDetectadaId      = it.sedeDetectadaId ?: unidad.sede_id,
+                unidadesSede         = if (it.sedeDetectadaId == null) {
+                    it.unidades.filter { u -> u.sede_id == unidad.sede_id }
+                } else it.unidadesSede
+            )
+        }
+    }
+
+    // ── Progreso del día ──────────────────────────────────────────────────────
+
+    private fun cargarProgresoHoy() {
+        viewModelScope.launch {
+            try {
+                val token      = sessionManager.bearerToken()
+                val visitasHoy = inovInfoApi.getVisitasHoy(token)
+                val pendientes = inovInfoApi.getPendientes(token)
+
+                // Auto-detectar sede a partir de las visitas de hoy
+                val sedeNombre = visitasHoy.firstOrNull()?.sede_nombre
+                val sedeId     = visitasHoy.firstOrNull()?.sede_id
+
+                // Números de unidades ya revisadas hoy en esta sede
+                val revisadas = if (sedeId != null) {
+                    visitasHoy.filter { it.sede_id == sedeId }.map { it.unidad_numero }.toSet()
+                } else emptySet()
+
+                // Todas las unidades de esta sede del catálogo cargado
+                val unidadesDeSede = if (sedeId != null) {
+                    _uiState.value.unidades.filter { it.sede_id == sedeId }
+                } else emptyList()
+
+                _uiState.update {
+                    it.copy(
+                        visitasHoy       = visitasHoy,
+                        pendientes       = pendientes,
+                        sedeDetectada    = sedeNombre,
+                        sedeDetectadaId  = sedeId,
+                        unidadesSede     = unidadesDeSede,
+                        unidadesRevisadas = revisadas
+                    )
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error cargando progreso: ${e.message}")
+            }
+        }
+    }
 
     fun onEstadoSelect(estado: EstadoDto) {
         _uiState.update { it.copy(estadoSeleccionado = estado) }
@@ -270,6 +334,7 @@ class NuevaVisitaViewModel @Inject constructor(
                         guardadoExitoso      = true
                     )
                 }
+                cargarProgresoHoy()
             } catch (e: Exception) {
                 Log.e(TAG, "Error guardando visita: ${e.javaClass.simpleName} - ${e.message}", e)
                 val msg = when (e) {

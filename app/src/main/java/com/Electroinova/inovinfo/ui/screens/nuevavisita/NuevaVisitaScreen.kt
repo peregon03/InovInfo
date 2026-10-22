@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -235,6 +236,74 @@ fun NuevaVisitaScreen(
                     }
                 }
 
+                // Progreso del día
+                if (uiState.sedeDetectada != null) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        shape  = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.LocationOn,
+                                    contentDescription = null,
+                                    tint     = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Sede: ${uiState.sedeDetectada}",
+                                    style      = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    "${uiState.unidadesRevisadas.size}/${uiState.unidadesSede.size}",
+                                    style      = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color      = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(
+                                progress = {
+                                    if (uiState.unidadesSede.isNotEmpty())
+                                        uiState.unidadesRevisadas.size.toFloat() / uiState.unidadesSede.size
+                                    else 0f
+                                },
+                                modifier   = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                                color      = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            // Chips: verde si ya fue revisada, gris si pendiente
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalArrangement   = Arrangement.spacedBy(4.dp)
+                            ) {
+                                uiState.unidadesSede.forEach { unidad ->
+                                    val revisada = unidad.numero in uiState.unidadesRevisadas
+                                    Surface(
+                                        shape    = RoundedCornerShape(6.dp),
+                                        color    = if (revisada) Color(0xFF2E7D32).copy(alpha = 0.15f)
+                                                   else MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.clickable { viewModel.onUnidadSelect(unidad) }
+                                    ) {
+                                        Text(
+                                            unidad.numero,
+                                            style      = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (revisada) FontWeight.Bold else FontWeight.Normal,
+                                            color      = if (revisada) Color(0xFF2E7D32)
+                                                         else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier   = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 1. Seleccionar unidad
                 val sedesUnicas = remember(uiState.unidades) {
                     uiState.unidades.map { it.sede_id to it.sede_nombre }.distinctBy { it.first }
@@ -292,6 +361,47 @@ fun NuevaVisitaScreen(
                                     text    = { Text("${unidad.numero} · ${unidad.sede_nombre}") },
                                     onClick = { viewModel.onUnidadSelect(unidad); unidadExpanded = false }
                                 )
+                            }
+                        }
+                    }
+                }
+
+                // Recordatorio de seguimiento pendiente
+                if (uiState.seguimientoPendiente != null) {
+                    val pend = uiState.seguimientoPendiente!!
+                    Card(
+                        colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                        shape    = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = null,
+                                tint     = Color(0xFFE65100),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    "Seguimiento pendiente",
+                                    style      = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color      = Color(0xFFE65100)
+                                )
+                                Text(
+                                    "Desde: ${pend.fecha_seguimiento}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFFBF360C)
+                                )
+                                if (!pend.nota_seguimiento.isNullOrBlank()) {
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        pend.nota_seguimiento,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
                             }
                         }
                     }

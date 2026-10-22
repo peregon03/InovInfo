@@ -20,17 +20,38 @@ const upload = multer({
 router.use(verificarToken);
 
 // GET /api/visitas — coordinadora ve todas, técnico ve solo las suyas
+// Query params opcionales: ?unidad_id=X para filtrar por unidad
 router.get('/', async (req, res) => {
     try {
         const esCoordinadora  = req.usuario.rol === 'coordinadora';
         const tienePermiso    = req.usuario.permisos?.includes('VER_TODAS_VISITAS');
         const verTodas        = esCoordinadora || tienePermiso;
+        const unidadId        = req.query.unidad_id ? parseInt(req.query.unidad_id, 10) : null;
+
+        // Construir filtros dinámicamente
+        const condiciones = [];
+        const params      = [];
+        let paramIndex    = 1;
+
+        if (!verTodas) {
+            condiciones.push(`v.tecnico_id = $${paramIndex++}`);
+            params.push(req.usuario.id);
+        }
+        if (unidadId) {
+            condiciones.push(`v.unidad_id = $${paramIndex++}`);
+            params.push(unidadId);
+        }
+
+        const whereClause = condiciones.length > 0
+            ? 'WHERE ' + condiciones.join(' AND ')
+            : '';
 
         const query = `
             SELECT v.id, v.created_at, v.requiere_seguimiento,
                    v.fecha_seguimiento, v.nota_seguimiento,
                    v.novedad_texto, v.observacion_estructurada,
                    u2.nombre  AS tecnico_nombre,
+                   un.id      AS unidad_id,
                    un.numero  AS unidad_numero,
                    s.nombre   AS sede_nombre,
                    ev.nombre  AS estado,
@@ -41,7 +62,7 @@ router.get('/', async (req, res) => {
                        ) FILTER (WHERE sm.id IS NOT NULL), '[]'
                    ) AS suministros,
                    COALESCE(
-                       json_agg(vf.url) FILTER (WHERE vf.id IS NOT NULL), '[]'
+                       json_agg(DISTINCT vf.url) FILTER (WHERE vf.id IS NOT NULL), '[]'
                    ) AS fotos
             FROM visitas v
             JOIN usuarios u2      ON v.tecnico_id   = u2.id
@@ -51,12 +72,11 @@ router.get('/', async (req, res) => {
             LEFT JOIN visita_suministros vs ON v.id = vs.visita_id
             LEFT JOIN suministros sm        ON vs.suministro_id = sm.id
             LEFT JOIN visita_fotos vf       ON v.id = vf.visita_id
-            ${verTodas ? '' : 'WHERE v.tecnico_id = $1'}
-            GROUP BY v.id, u2.nombre, un.numero, s.nombre, ev.nombre, ev.color_hex
+            ${whereClause}
+            GROUP BY v.id, u2.nombre, un.id, un.numero, s.nombre, ev.nombre, ev.color_hex
             ORDER BY v.created_at DESC
         `;
 
-        const params = verTodas ? [] : [req.usuario.id];
         const result = await pool.query(query, params);
         res.json(result.rows);
 
@@ -73,8 +93,8 @@ router.get('/hoy', async (req, res) => {
         const verTodas       = esCoordinadora || tienePermiso;
 
         const query = `
-            SELECT v.id, un.numero AS unidad_numero, s.nombre AS sede_nombre,
-                   ev.nombre AS estado, ev.color_hex, u2.nombre AS tecnico_nombre,
+            SELECT v.id, un.id AS unidad_id, un.numero AS unidad_numero, s.nombre AS sede_nombre,
+                   s.id AS sede_id, ev.nombre AS estado, ev.color_hex, u2.nombre AS tecnico_nombre,
                    v.observacion_estructurada,
                    (SELECT COUNT(*) FROM visita_fotos vf WHERE vf.visita_id = v.id) AS fotos_count
             FROM visitas v
@@ -104,7 +124,7 @@ router.get('/pendientes', async (req, res) => {
         const verTodas       = esCoordinadora || tienePermiso;
 
         const query = `
-            SELECT v.id, un.numero AS unidad_numero, s.nombre AS sede_nombre,
+            SELECT v.id, un.id AS unidad_id, un.numero AS unidad_numero, s.nombre AS sede_nombre,
                    v.fecha_seguimiento, v.nota_seguimiento,
                    u2.nombre AS tecnico_nombre,
                    CASE

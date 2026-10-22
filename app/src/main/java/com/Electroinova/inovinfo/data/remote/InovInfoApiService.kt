@@ -22,6 +22,12 @@ interface InovInfoApiService {
     @GET("api/visitas/pendientes")
     suspend fun getPendientes(@Header("Authorization") token: String): List<PendienteDto>
 
+    @GET("api/visitas")
+    suspend fun getVisitasPorUnidad(
+        @Header("Authorization") token: String,
+        @Query("unidad_id") unidadId: Int
+    ): List<VisitaCompletaDto>
+
     @POST("api/visitas")
     suspend fun crearVisita(
         @Header("Authorization") token: String,

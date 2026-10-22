@@ -5,7 +5,8 @@
       "Bash(npm install:*)",
       "Bash(./gradlew assembleDebug)",
       "Bash(node -e \":*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(./gradlew :app:compileDebugKotlin)"
     ]
   }
 }
