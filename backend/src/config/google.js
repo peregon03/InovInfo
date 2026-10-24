@@ -81,16 +81,18 @@ async function subirFotoDrive(fileBuffer, fileName, mimeType, sedeNombre) {
     const drive    = getDriveClient();
     const rootId   = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-    // Determinar carpeta destino: raíz → año → sede
+    // Determinar carpeta destino: raíz → año → sede → fecha (YYYY-MM-DD)
     let targetFolder = rootId || null;
     if (rootId) {
-        const anio = new Date().getFullYear().toString();
+        const ahora = new Date();
+        const anio  = ahora.getFullYear().toString();
+        const fecha = ahora.toISOString().split('T')[0]; // YYYY-MM-DD
+
         const carpetaAnio = await obtenerOCrearCarpeta(drive, anio, rootId);
-        if (sedeNombre) {
-            targetFolder = await obtenerOCrearCarpeta(drive, sedeNombre, carpetaAnio);
-        } else {
-            targetFolder = carpetaAnio;
-        }
+        const carpetaSede = sedeNombre
+            ? await obtenerOCrearCarpeta(drive, sedeNombre, carpetaAnio)
+            : carpetaAnio;
+        targetFolder = await obtenerOCrearCarpeta(drive, fecha, carpetaSede);
     }
 
     const { Readable } = require('stream');

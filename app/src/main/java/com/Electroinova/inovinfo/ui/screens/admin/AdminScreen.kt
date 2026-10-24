@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -120,6 +122,7 @@ fun AdminScreen(
 
     // Filtro de búsqueda de unidades
     var filtroUnidades by remember { mutableStateOf("") }
+    var unidadesExpandidas by remember { mutableStateOf(false) }
 
     // Dropdown sede (filtro informe)
     var sedeExpanded by remember { mutableStateOf(false) }
@@ -300,6 +303,10 @@ fun AdminScreen(
                             u.sede_nombre.contains(filtroUnidades, ignoreCase = true)
                     }
 
+                    // Auto-expandir cuando hay búsqueda activa
+                    val mostrarExpandidas = unidadesExpandidas || filtroUnidades.isNotBlank()
+                    val unidadesVisibles = if (mostrarExpandidas) unidadesFiltradas else unidadesFiltradas.take(3)
+
                     if (unidadesFiltradas.isEmpty() && !state.unidadesLoading) {
                         Text(
                             if (filtroUnidades.isBlank()) "Sin unidades registradas" else "Sin resultados para \"$filtroUnidades\"",
@@ -307,7 +314,7 @@ fun AdminScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        unidadesFiltradas.forEach { u ->
+                        unidadesVisibles.forEach { u ->
                             Row(
                                 modifier          = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -318,7 +325,6 @@ fun AdminScreen(
                                         style      = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Medium
                                     )
-                                    // Chip con nombre de sede
                                     Surface(
                                         shape = RoundedCornerShape(4.dp),
                                         color = ElectroNavyBlue.copy(alpha = 0.12f)
@@ -332,7 +338,6 @@ fun AdminScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
-                                    // Placa si está disponible
                                     if (!u.placa.isNullOrBlank()) {
                                         Text(
                                             "Placa: ${u.placa}",
@@ -355,6 +360,25 @@ fun AdminScreen(
                                 }
                             }
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+                        }
+
+                        // Botón expandir/contraer (solo si hay más de 3 y no hay búsqueda)
+                        if (unidadesFiltradas.size > 3 && filtroUnidades.isBlank()) {
+                            TextButton(
+                                onClick  = { unidadesExpandidas = !unidadesExpandidas },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    if (unidadesExpandidas) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    if (unidadesExpandidas) "Contraer lista"
+                                    else "Ver todas (${unidadesFiltradas.size})"
+                                )
+                            }
                         }
                     }
 
