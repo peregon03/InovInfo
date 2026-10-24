@@ -81,9 +81,17 @@ data class NuevaVisitaUiState(
 )
 
 internal const val OBSERVACION_OK_DEFAULT =
-    "Se realizó visita técnica a la unidad. Sistema DVR Móvil verificado en óptimas " +
-    "condiciones de operación. Cámaras operativas, GPS activo y batería en rango normal. " +
-    "Sin novedades reportadas."
+    "Se ejecutó el servicio de revisión, diagnóstico técnico, ajuste, reparación, " +
+    "mantenimiento general y limpieza del sistema de cámaras"
+
+private const val OBSERVACION_INOPERATIVA =
+    "Al momento de la visita esta unidad se encuentra inoperativa"
+
+private const val OBSERVACION_SIN_LLAVES =
+    "Al momento de la inspección no se encontraron llaves"
+
+private const val OBSERVACION_BAT_DESCONECTADA =
+    "Al momento de la visita la batería de la unidad se encontraba desconectada"
 
 private const val TAG = "NuevaVisitaVM"
 
@@ -230,8 +238,15 @@ class NuevaVisitaViewModel @Inject constructor(
 
     fun onEstadoSelect(estado: EstadoDto) {
         _uiState.update { it.copy(estadoSeleccionado = estado) }
-        if (estado.nombre == "OK") {
-            _uiState.update { it.copy(observacion = OBSERVACION_OK_DEFAULT, novedadTecnico = "") }
+        val textoDefault = when (estado.nombre) {
+            "OK"                  -> OBSERVACION_OK_DEFAULT
+            "Inoperativa"         -> OBSERVACION_INOPERATIVA
+            "Sin llaves"          -> OBSERVACION_SIN_LLAVES
+            "Bat. desconectada"   -> OBSERVACION_BAT_DESCONECTADA
+            else                  -> null
+        }
+        if (textoDefault != null) {
+            _uiState.update { it.copy(observacion = textoDefault, novedadTecnico = "") }
         }
     }
 

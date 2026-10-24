@@ -282,10 +282,12 @@ class AdminViewModel @Inject constructor(
                 val response = apiService.importarExcel(sessionManager.bearerToken(), part)
 
                 val msg = buildString {
-                    append("${response.sedesCreadas} sedes y ${response.unidadesCreadas} unidades creadas")
-                    if (response.errores.isNotEmpty()) {
-                        append("\n${response.errores.size} errores")
-                    }
+                    append("${response.unidadesCreadas} unidades creadas")
+                    if (response.unidadesActualizadas > 0) append(", ${response.unidadesActualizadas} actualizadas")
+                    if (response.sedesCreadas > 0) append(", ${response.sedesCreadas} sedes nuevas")
+                    if (response.sinPlaca > 0) append("\n${response.sinPlaca} unidades sin placa")
+                    if (response.advertencias.isNotEmpty()) append("\n${response.advertencias.size} advertencias")
+                    if (response.errores.isNotEmpty()) append("\n${response.errores.size} errores")
                 }
                 _uiState.update {
                     it.copy(

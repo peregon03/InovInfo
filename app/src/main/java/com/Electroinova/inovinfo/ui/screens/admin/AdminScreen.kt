@@ -332,6 +332,14 @@ fun AdminScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
+                                    // Placa si está disponible
+                                    if (!u.placa.isNullOrBlank()) {
+                                        Text(
+                                            "Placa: ${u.placa}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                                 IconButton(
                                     onClick  = { unidadParaEditar = u },
@@ -464,7 +472,7 @@ fun AdminScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
                     Text(
-                        text  = "Sube un archivo Excel (.xlsx) con columnas: sede, unidad. La primera fila es encabezado.",
+                        text  = "Sube un archivo Excel (.xlsx) con hoja 'Unidades' y columnas: no_interno, placa, sede. La primera fila es encabezado.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

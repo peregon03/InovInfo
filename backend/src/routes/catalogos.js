@@ -47,7 +47,7 @@ router.put('/sedes/:id', coordinadoraOPermiso('EDITAR_CATALOGOS'), async (req, r
 router.get('/unidades', async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT u.id, u.numero, u.activa, s.nombre AS sede_nombre, s.id AS sede_id
+            SELECT u.id, u.numero, u.placa, u.activa, s.nombre AS sede_nombre, s.id AS sede_id
             FROM unidades u
             JOIN sedes s ON u.sede_id = s.id
             WHERE u.activa = TRUE

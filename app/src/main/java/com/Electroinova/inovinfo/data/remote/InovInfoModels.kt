@@ -5,6 +5,7 @@ package com.Electroinova.inovinfo.data.remote
 data class UnidadDto(
     val id:          Int,
     val numero:      String,
+    val placa:       String? = null,
     val sede_nombre: String,
     val sede_id:     Int
 )
@@ -167,7 +168,10 @@ data class InformeResponse(
 // ── Importación masiva desde Excel ────────────────────────────────────────────
 
 data class ImportarExcelResponse(
-    val sedesCreadas:   Int,
-    val unidadesCreadas: Int,
-    val errores:        List<String> = emptyList()
+    val sedesCreadas:        Int = 0,
+    val unidadesCreadas:     Int = 0,
+    val unidadesActualizadas: Int = 0,
+    val sinPlaca:            Int = 0,
+    val advertencias:        List<String> = emptyList(),
+    val errores:             List<String> = emptyList()
 )
