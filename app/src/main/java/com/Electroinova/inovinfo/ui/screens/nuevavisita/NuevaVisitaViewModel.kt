@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 
 // ── Estado UI ─────────────────────────────────────────────────────────────────
@@ -328,7 +331,7 @@ class NuevaVisitaViewModel @Inject constructor(
                     ?: (visitaMap["id"] as? Number)?.toInt()
                 Log.d(TAG, "Visita creada — id=$visitaId, keys=${visitaMap.keys}, fotos=${_uiState.value.fotos.size}")
 
-                // 2. Subir fotos directo a Google Drive (sin pasar por el servidor)
+                // 2. Subir fotos comprimidas al servidor → Drive
                 val fotosASubir = _uiState.value.fotos
                 if (visitaId != null && fotosASubir.isNotEmpty()) {
                     fotosASubir.forEachIndexed { index, uri ->
@@ -336,21 +339,9 @@ class NuevaVisitaViewModel @Inject constructor(
                             it.copy(progresoFotos = "Subiendo foto ${index + 1}/${fotosASubir.size}...")
                         }
                         try {
-                            // Paso A: pedir URL de subida al backend (ligero, sin bytes)
-                            val sesion = inovInfoApi.iniciarSubidaFoto(token, visitaId)
-                            Log.d(TAG, "Sesión de subida obtenida para foto ${index + 1}, orden=${sesion.orden}")
-
-                            // Paso B: comprimir y subir directo a Google Drive
-                            val bytes = comprimirFoto(uri)
-                            val fileId = subirADrive(sesion.uploadUrl, bytes)
-                            Log.d(TAG, "Foto ${index + 1} subida a Drive, fileId=$fileId")
-
-                            // Paso C: confirmar en el backend (guarda URL en BD)
-                            inovInfoApi.confirmarFoto(
-                                token, visitaId,
-                                ConfirmarFotoRequest(fileId = fileId, orden = sesion.orden)
-                            )
-                            Log.d(TAG, "Foto ${index + 1} confirmada en BD")
+                            val part = comprimirYCrearPart(uri, index + 1)
+                            inovInfoApi.subirFoto(token, visitaId, part)
+                            Log.d(TAG, "Foto ${index + 1} subida correctamente")
                         } catch (e: Exception) {
                             Log.w(TAG, "No se pudo subir foto ${index + 1}: ${e.message}")
                         }
@@ -395,62 +386,38 @@ class NuevaVisitaViewModel @Inject constructor(
     // ── Utilidades de fotos ───────────────────────────────────────────────────
 
     /**
-     * Comprime un [Uri] de imagen a JPEG ≤ 4 MB, máx 1920px de lado largo.
+     * Comprime un [Uri] a JPEG ≤ 4 MB, máx 1920px, y devuelve un MultipartBody.Part.
      */
-    private fun comprimirFoto(uri: Uri): ByteArray {
-        val inputStream = app.contentResolver.openInputStream(uri)!!
-        val original = android.graphics.BitmapFactory.decodeStream(inputStream)
-        inputStream.close()
+    private suspend fun comprimirYCrearPart(uri: Uri, index: Int): MultipartBody.Part =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val inputStream = app.contentResolver.openInputStream(uri)!!
+            val original = android.graphics.BitmapFactory.decodeStream(inputStream)
+            inputStream.close()
 
-        val maxSide = 1920
-        val scaled = if (original.width > maxSide || original.height > maxSide) {
-            val ratio = maxSide.toFloat() / maxOf(original.width, original.height)
-            val newW = (original.width * ratio).toInt()
-            val newH = (original.height * ratio).toInt()
-            android.graphics.Bitmap.createScaledBitmap(original, newW, newH, true).also {
-                if (it !== original) original.recycle()
-            }
-        } else original
+            val maxSide = 1920
+            val scaled = if (original.width > maxSide || original.height > maxSide) {
+                val ratio = maxSide.toFloat() / maxOf(original.width, original.height)
+                val newW = (original.width * ratio).toInt()
+                val newH = (original.height * ratio).toInt()
+                android.graphics.Bitmap.createScaledBitmap(original, newW, newH, true).also {
+                    if (it !== original) original.recycle()
+                }
+            } else original
 
-        var quality = 85
-        var bytes: ByteArray
-        do {
-            val baos = java.io.ByteArrayOutputStream()
-            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, baos)
-            bytes = baos.toByteArray()
-            quality -= 10
-        } while (bytes.size > 4 * 1024 * 1024 && quality > 10)
-        scaled.recycle()
+            var quality = 85
+            var bytes: ByteArray
+            do {
+                val baos = java.io.ByteArrayOutputStream()
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, baos)
+                bytes = baos.toByteArray()
+                quality -= 10
+            } while (bytes.size > 4 * 1024 * 1024 && quality > 10)
+            scaled.recycle()
 
-        Log.d(TAG, "Foto comprimida: ${bytes.size / 1024}KB, quality=${quality + 10}")
-        return bytes
-    }
-
-    /**
-     * Sube bytes JPEG directamente a Google Drive usando la URL resumable.
-     * Devuelve el fileId del archivo creado.
-     */
-    private fun subirADrive(uploadUrl: String, bytes: ByteArray): String {
-        val url = java.net.URL(uploadUrl)
-        val conn = url.openConnection() as java.net.HttpURLConnection
-        conn.requestMethod = "PUT"
-        conn.doOutput = true
-        conn.setRequestProperty("Content-Type", "image/jpeg")
-        conn.setRequestProperty("Content-Length", bytes.size.toString())
-        conn.outputStream.use { it.write(bytes) }
-
-        val responseCode = conn.responseCode
-        if (responseCode !in 200..201) {
-            val errBody = conn.errorStream?.bufferedReader()?.readText() ?: "sin detalle"
-            throw Exception("Drive upload failed: $responseCode — $errBody")
+            Log.d(TAG, "Foto $index comprimida: ${bytes.size / 1024}KB, quality=${quality + 10}")
+            val requestBody = bytes.toRequestBody("image/jpeg".toMediaType())
+            MultipartBody.Part.createFormData("foto", "foto_$index.jpg", requestBody)
         }
-
-        val responseBody = conn.inputStream.bufferedReader().readText()
-        // La respuesta es JSON con { "id": "...", ... }
-        val fileId = org.json.JSONObject(responseBody).getString("id")
-        conn.disconnect()
-        return fileId
-    }
 
     // ── Gemini ────────────────────────────────────────────────────────────────
 

@@ -34,17 +34,12 @@ interface InovInfoApiService {
         @Body request: CrearVisitaRequest
     ): Map<String, Any>
 
-    @POST("api/visitas/{id}/fotos/iniciar")
-    suspend fun iniciarSubidaFoto(
-        @Header("Authorization") token: String,
-        @Path("id") visitaId: Int
-    ): IniciarSubidaResponse
-
-    @POST("api/visitas/{id}/fotos/confirmar")
-    suspend fun confirmarFoto(
+    @Multipart
+    @POST("api/visitas/{id}/fotos")
+    suspend fun subirFoto(
         @Header("Authorization") token: String,
         @Path("id") visitaId: Int,
-        @Body request: ConfirmarFotoRequest
+        @Part foto: MultipartBody.Part
     ): FotoResponse
 
     @DELETE("api/visitas/{id}/fotos/{fotoId}")
