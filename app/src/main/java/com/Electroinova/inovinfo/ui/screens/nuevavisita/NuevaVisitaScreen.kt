@@ -236,67 +236,88 @@ fun NuevaVisitaScreen(
                     }
                 }
 
-                // Progreso del día
-                if (uiState.sedeDetectada != null) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                        shape  = RoundedCornerShape(12.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.LocationOn,
-                                    contentDescription = null,
-                                    tint     = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "Sede: ${uiState.sedeDetectada}",
-                                    style      = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(Modifier.weight(1f))
-                                Text(
-                                    "${uiState.unidadesRevisadas.size}/${uiState.unidadesSede.size}",
-                                    style      = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color      = MaterialTheme.colorScheme.primary
+                // Progreso del día (multi-sede)
+                if (uiState.sedesVisitadas.isNotEmpty()) {
+                    // Tabs de sede si hay más de una
+                    if (uiState.sedesVisitadas.size > 1) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(uiState.sedesVisitadas) { sede ->
+                                FilterChip(
+                                    selected = uiState.sedeProgresoActiva == sede.sedeId,
+                                    onClick  = { viewModel.onSedeProgresoChange(sede.sedeId) },
+                                    label    = {
+                                        Text(
+                                            "${sede.sedeNombre} (${sede.unidadesRevisadas.size}/${sede.unidadesSede.size})",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
                                 )
                             }
-                            Spacer(Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = {
-                                    if (uiState.unidadesSede.isNotEmpty())
-                                        uiState.unidadesRevisadas.size.toFloat() / uiState.unidadesSede.size
-                                    else 0f
-                                },
-                                modifier   = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                                color      = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            // Chips: verde si ya fue revisada, gris si pendiente
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalArrangement   = Arrangement.spacedBy(4.dp)
-                            ) {
-                                uiState.unidadesSede.forEach { unidad ->
-                                    val revisada = unidad.numero in uiState.unidadesRevisadas
-                                    Surface(
-                                        shape    = RoundedCornerShape(6.dp),
-                                        color    = if (revisada) Color(0xFF2E7D32).copy(alpha = 0.15f)
-                                                   else MaterialTheme.colorScheme.surfaceVariant,
-                                        modifier = Modifier.clickable { viewModel.onUnidadSelect(unidad) }
-                                    ) {
-                                        Text(
-                                            unidad.numero,
-                                            style      = MaterialTheme.typography.labelSmall,
-                                            fontWeight = if (revisada) FontWeight.Bold else FontWeight.Normal,
-                                            color      = if (revisada) Color(0xFF2E7D32)
-                                                         else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier   = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                        )
+                        }
+                    }
+
+                    val sedeActiva = uiState.sedesVisitadas.find { it.sedeId == uiState.sedeProgresoActiva }
+                    if (sedeActiva != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                            shape  = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.LocationOn,
+                                        contentDescription = null,
+                                        tint     = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Sede: ${sedeActiva.sedeNombre}",
+                                        style      = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(Modifier.weight(1f))
+                                    Text(
+                                        "${sedeActiva.unidadesRevisadas.size}/${sedeActiva.unidadesSede.size}",
+                                        style      = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color      = Color.White
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                LinearProgressIndicator(
+                                    progress = {
+                                        if (sedeActiva.unidadesSede.isNotEmpty())
+                                            sedeActiva.unidadesRevisadas.size.toFloat() / sedeActiva.unidadesSede.size
+                                        else 0f
+                                    },
+                                    modifier   = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                                    color      = Color.White,
+                                    trackColor = Color.White.copy(alpha = 0.3f)
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                // Chips: verde si ya fue revisada, gris si pendiente
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement   = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    sedeActiva.unidadesSede.forEach { unidad ->
+                                        val revisada = unidad.numero in sedeActiva.unidadesRevisadas
+                                        Surface(
+                                            shape    = RoundedCornerShape(6.dp),
+                                            color    = if (revisada) Color(0xFF2E7D32)
+                                                       else MaterialTheme.colorScheme.surfaceVariant,
+                                            modifier = Modifier.clickable { viewModel.onUnidadSelect(unidad) }
+                                        ) {
+                                            Text(
+                                                unidad.numero,
+                                                style      = MaterialTheme.typography.labelSmall,
+                                                fontWeight = if (revisada) FontWeight.Bold else FontWeight.Normal,
+                                                color      = if (revisada) Color.Black
+                                                             else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier   = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }

@@ -149,6 +149,17 @@ data class FotoResponse(
     val url: String
 )
 
+data class IniciarSubidaResponse(
+    val uploadUrl: String,
+    val orden:     Int,
+    val fileName:  String
+)
+
+data class ConfirmarFotoRequest(
+    val fileId: String,
+    val orden:  Int
+)
+
 // ── Informes ────────────────────────────────────────────────────────────────
 
 data class GenerarInformeRequest(

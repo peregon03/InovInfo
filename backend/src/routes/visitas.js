@@ -2,7 +2,7 @@ const router  = require('express').Router();
 const multer  = require('multer');
 const pool    = require('../config/db');
 const { verificarToken, coordinadoraOPermiso } = require('../middleware/auth');
-const { subirFotoDrive } = require('../config/google');
+const { subirFotoDrive, crearSesionSubida, hacerPublicoYObtenerUrl } = require('../config/google');
 
 // Multer: almacenamiento en memoria (buffer directo → Drive, sin disco)
 const upload = multer({
@@ -202,16 +202,12 @@ router.post('/', async (req, res) => {
     }
 });
 
-// POST /api/visitas/:id/fotos — sube una foto a Drive y guarda la URL en BD
-router.post('/:id/fotos', upload.single('foto'), async (req, res) => {
+// POST /api/visitas/:id/fotos/iniciar — genera URL de subida directa a Drive
+router.post('/:id/fotos/iniciar', async (req, res) => {
     const visitaId = parseInt(req.params.id, 10);
 
-    if (!req.file) {
-        return res.status(400).json({ error: 'Se requiere el campo "foto"' });
-    }
-
     try {
-        // Verificar que la visita existe, obtener sede y verificar permisos
+        // Verificar visita, permisos y obtener sede
         const visitaCheck = await pool.query(
             `SELECT v.id, v.tecnico_id, s.nombre AS sede_nombre
              FROM visitas v
@@ -230,27 +226,62 @@ router.post('/:id/fotos', upload.single('foto'), async (req, res) => {
             return res.status(403).json({ error: 'Sin permiso para esta visita' });
         }
 
-        // Calcular el siguiente orden
+        // Calcular orden
         const ordenRes = await pool.query(
             'SELECT COALESCE(MAX(orden), 0) + 1 AS siguiente FROM visita_fotos WHERE visita_id = $1',
             [visitaId]
         );
-        const orden = ordenRes.rows[0].siguiente;
-
-        // Subir a Google Drive (organizado en /año/sede/)
+        const orden    = ordenRes.rows[0].siguiente;
         const fileName = `visita_${visitaId}_foto_${orden}_${Date.now()}.jpg`;
-        const url      = await subirFotoDrive(req.file.buffer, fileName, req.file.mimetype, visita.sede_nombre);
 
-        // Guardar URL en la base de datos
+        // Crear sesión resumable en Drive (no pasa bytes por el servidor)
+        const { uploadUrl } = await crearSesionSubida(fileName, 'image/jpeg', visita.sede_nombre);
+
+        res.json({ uploadUrl, orden, fileName });
+
+    } catch (err) {
+        console.error('Error iniciando subida:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/visitas/:id/fotos/confirmar — la app subió a Drive, registra en BD
+router.post('/:id/fotos/confirmar', async (req, res) => {
+    const visitaId = parseInt(req.params.id, 10);
+    const { fileId, orden } = req.body;
+
+    if (!fileId) {
+        return res.status(400).json({ error: 'fileId requerido' });
+    }
+
+    try {
+        // Verificar permisos
+        const visitaCheck = await pool.query(
+            'SELECT id, tecnico_id FROM visitas WHERE id = $1',
+            [visitaId]
+        );
+        if (visitaCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Visita no encontrada' });
+        }
+        const esCoordinadora = req.usuario.rol === 'coordinadora';
+        const esDueno        = visitaCheck.rows[0].tecnico_id === req.usuario.id;
+        if (!esCoordinadora && !esDueno) {
+            return res.status(403).json({ error: 'Sin permiso para esta visita' });
+        }
+
+        // Hacer público y obtener URL
+        const url = await hacerPublicoYObtenerUrl(fileId);
+
+        // Guardar en BD
         const insertRes = await pool.query(
             'INSERT INTO visita_fotos (visita_id, url, orden) VALUES ($1, $2, $3) RETURNING id, url',
-            [visitaId, url, orden]
+            [visitaId, url, orden || 1]
         );
 
         res.status(201).json(insertRes.rows[0]);
 
     } catch (err) {
-        console.error('Error subiendo foto:', err.message);
+        console.error('Error confirmando foto:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

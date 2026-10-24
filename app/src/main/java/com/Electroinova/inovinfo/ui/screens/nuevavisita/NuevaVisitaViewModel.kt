@@ -14,12 +14,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 
 // ── Estado UI ─────────────────────────────────────────────────────────────────
+
+data class SedeProgreso(
+    val sedeId:            Int,
+    val sedeNombre:        String,
+    val unidadesSede:      List<UnidadDto>,
+    val unidadesRevisadas: Set<String>
+)
 
 sealed interface GeminiUiState {
     data object Idle    : GeminiUiState
@@ -63,12 +67,10 @@ data class NuevaVisitaUiState(
     // Rol
     val esCoordinadora: Boolean = false,
 
-    // Progreso del día
-    val visitasHoy:          List<VisitaHoyDto>  = emptyList(),
-    val sedeDetectada:       String?             = null,
-    val sedeDetectadaId:     Int?                = null,
-    val unidadesSede:        List<UnidadDto>     = emptyList(),
-    val unidadesRevisadas:   Set<String>         = emptySet(),
+    // Progreso del día (multi-sede)
+    val visitasHoy:           List<VisitaHoyDto>  = emptyList(),
+    val sedesVisitadas:       List<SedeProgreso>   = emptyList(),
+    val sedeProgresoActiva:   Int?                = null, // sede_id of currently shown progress
 
     // Seguimiento pendiente de la unidad seleccionada
     val seguimientoPendiente: PendienteDto?      = null,
@@ -183,16 +185,23 @@ class NuevaVisitaViewModel @Inject constructor(
 
     fun onUnidadSelect(unidad: UnidadDto) {
         val pendiente = _uiState.value.pendientes.firstOrNull { it.unidad_id == unidad.id }
-        _uiState.update {
-            it.copy(
+        _uiState.update { state ->
+            // Si esta sede no está aún en sedesVisitadas, se agrega
+            val sedesActualizadas = if (state.sedesVisitadas.none { it.sedeId == unidad.sede_id }) {
+                state.sedesVisitadas + SedeProgreso(
+                    sedeId            = unidad.sede_id,
+                    sedeNombre        = unidad.sede_nombre,
+                    unidadesSede      = state.unidades.filter { it.sede_id == unidad.sede_id },
+                    unidadesRevisadas = emptySet()
+                )
+            } else state.sedesVisitadas
+
+            state.copy(
                 unidadSeleccionada   = unidad,
                 busquedaUnidad       = "",
                 seguimientoPendiente = pendiente,
-                sedeDetectada        = it.sedeDetectada ?: unidad.sede_nombre,
-                sedeDetectadaId      = it.sedeDetectadaId ?: unidad.sede_id,
-                unidadesSede         = if (it.sedeDetectadaId == null) {
-                    it.unidades.filter { u -> u.sede_id == unidad.sede_id }
-                } else it.unidadesSede
+                sedesVisitadas       = sedesActualizadas,
+                sedeProgresoActiva   = unidad.sede_id
             )
         }
     }
@@ -206,28 +215,28 @@ class NuevaVisitaViewModel @Inject constructor(
                 val visitasHoy = inovInfoApi.getVisitasHoy(token)
                 val pendientes = inovInfoApi.getPendientes(token)
 
-                // Auto-detectar sede a partir de las visitas de hoy
-                val sedeNombre = visitasHoy.firstOrNull()?.sede_nombre
-                val sedeId     = visitasHoy.firstOrNull()?.sede_id
+                // Agrupar visitas por sede para soporte multi-sede
+                val visitasPorSede = visitasHoy.groupBy { it.sede_id }
+                val todasUnidades  = _uiState.value.unidades
 
-                // Números de unidades ya revisadas hoy en esta sede
-                val revisadas = if (sedeId != null) {
-                    visitasHoy.filter { it.sede_id == sedeId }.map { it.unidad_numero }.toSet()
-                } else emptySet()
-
-                // Todas las unidades de esta sede del catálogo cargado
-                val unidadesDeSede = if (sedeId != null) {
-                    _uiState.value.unidades.filter { it.sede_id == sedeId }
-                } else emptyList()
+                val sedesProgreso = visitasPorSede.map { (sedeId, visitas) ->
+                    val sedeNombre = visitas.first().sede_nombre
+                    val revisadas  = visitas.map { it.unidad_numero }.toSet()
+                    val unidadesDeSede = todasUnidades.filter { it.sede_id == sedeId }
+                    SedeProgreso(
+                        sedeId            = sedeId,
+                        sedeNombre        = sedeNombre,
+                        unidadesSede      = unidadesDeSede,
+                        unidadesRevisadas = revisadas
+                    )
+                }
 
                 _uiState.update {
                     it.copy(
-                        visitasHoy       = visitasHoy,
-                        pendientes       = pendientes,
-                        sedeDetectada    = sedeNombre,
-                        sedeDetectadaId  = sedeId,
-                        unidadesSede     = unidadesDeSede,
-                        unidadesRevisadas = revisadas
+                        visitasHoy         = visitasHoy,
+                        pendientes         = pendientes,
+                        sedesVisitadas     = sedesProgreso,
+                        sedeProgresoActiva = sedesProgreso.firstOrNull()?.sedeId
                     )
                 }
             } catch (e: Exception) {
@@ -316,8 +325,10 @@ class NuevaVisitaViewModel @Inject constructor(
                     )
                 )
                 val visitaId = (visitaMap["id"] as? Double)?.toInt()
+                    ?: (visitaMap["id"] as? Number)?.toInt()
+                Log.d(TAG, "Visita creada — id=$visitaId, keys=${visitaMap.keys}, fotos=${_uiState.value.fotos.size}")
 
-                // 2. Subir fotos una a una si existen y la visita se creó correctamente
+                // 2. Subir fotos directo a Google Drive (sin pasar por el servidor)
                 val fotosASubir = _uiState.value.fotos
                 if (visitaId != null && fotosASubir.isNotEmpty()) {
                     fotosASubir.forEachIndexed { index, uri ->
@@ -325,10 +336,22 @@ class NuevaVisitaViewModel @Inject constructor(
                             it.copy(progresoFotos = "Subiendo foto ${index + 1}/${fotosASubir.size}...")
                         }
                         try {
-                            val part = uriToMultipart(uri, index + 1)
-                            inovInfoApi.subirFoto(token, visitaId, part)
+                            // Paso A: pedir URL de subida al backend (ligero, sin bytes)
+                            val sesion = inovInfoApi.iniciarSubidaFoto(token, visitaId)
+                            Log.d(TAG, "Sesión de subida obtenida para foto ${index + 1}, orden=${sesion.orden}")
+
+                            // Paso B: comprimir y subir directo a Google Drive
+                            val bytes = comprimirFoto(uri)
+                            val fileId = subirADrive(sesion.uploadUrl, bytes)
+                            Log.d(TAG, "Foto ${index + 1} subida a Drive, fileId=$fileId")
+
+                            // Paso C: confirmar en el backend (guarda URL en BD)
+                            inovInfoApi.confirmarFoto(
+                                token, visitaId,
+                                ConfirmarFotoRequest(fileId = fileId, orden = sesion.orden)
+                            )
+                            Log.d(TAG, "Foto ${index + 1} confirmada en BD")
                         } catch (e: Exception) {
-                            // Un error en una foto no cancela el guardado — se registra y continúa
                             Log.w(TAG, "No se pudo subir foto ${index + 1}: ${e.message}")
                         }
                     }
@@ -366,18 +389,67 @@ class NuevaVisitaViewModel @Inject constructor(
     fun limpiarExito()       = _uiState.update { it.copy(guardadoExitoso = false) }
     fun limpiarErrorGuardar() = _uiState.update { it.copy(errorGuardar = null) }
 
+    fun onSedeProgresoChange(sedeId: Int) =
+        _uiState.update { it.copy(sedeProgresoActiva = sedeId) }
+
     // ── Utilidades de fotos ───────────────────────────────────────────────────
 
     /**
-     * Convierte un [Uri] local en un [MultipartBody.Part] listo para Retrofit.
-     * Lee los bytes en memoria (máx. 5 MB, validado en el servidor).
+     * Comprime un [Uri] de imagen a JPEG ≤ 4 MB, máx 1920px de lado largo.
      */
-    private fun uriToMultipart(uri: Uri, index: Int): MultipartBody.Part {
-        val contentResolver = app.contentResolver
-        val mimeType        = contentResolver.getType(uri) ?: "image/jpeg"
-        val bytes           = contentResolver.openInputStream(uri)!!.use { it.readBytes() }
-        val requestBody     = bytes.toRequestBody(mimeType.toMediaType())
-        return MultipartBody.Part.createFormData("foto", "foto_$index.jpg", requestBody)
+    private fun comprimirFoto(uri: Uri): ByteArray {
+        val inputStream = app.contentResolver.openInputStream(uri)!!
+        val original = android.graphics.BitmapFactory.decodeStream(inputStream)
+        inputStream.close()
+
+        val maxSide = 1920
+        val scaled = if (original.width > maxSide || original.height > maxSide) {
+            val ratio = maxSide.toFloat() / maxOf(original.width, original.height)
+            val newW = (original.width * ratio).toInt()
+            val newH = (original.height * ratio).toInt()
+            android.graphics.Bitmap.createScaledBitmap(original, newW, newH, true).also {
+                if (it !== original) original.recycle()
+            }
+        } else original
+
+        var quality = 85
+        var bytes: ByteArray
+        do {
+            val baos = java.io.ByteArrayOutputStream()
+            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, baos)
+            bytes = baos.toByteArray()
+            quality -= 10
+        } while (bytes.size > 4 * 1024 * 1024 && quality > 10)
+        scaled.recycle()
+
+        Log.d(TAG, "Foto comprimida: ${bytes.size / 1024}KB, quality=${quality + 10}")
+        return bytes
+    }
+
+    /**
+     * Sube bytes JPEG directamente a Google Drive usando la URL resumable.
+     * Devuelve el fileId del archivo creado.
+     */
+    private fun subirADrive(uploadUrl: String, bytes: ByteArray): String {
+        val url = java.net.URL(uploadUrl)
+        val conn = url.openConnection() as java.net.HttpURLConnection
+        conn.requestMethod = "PUT"
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "image/jpeg")
+        conn.setRequestProperty("Content-Length", bytes.size.toString())
+        conn.outputStream.use { it.write(bytes) }
+
+        val responseCode = conn.responseCode
+        if (responseCode !in 200..201) {
+            val errBody = conn.errorStream?.bufferedReader()?.readText() ?: "sin detalle"
+            throw Exception("Drive upload failed: $responseCode — $errBody")
+        }
+
+        val responseBody = conn.inputStream.bufferedReader().readText()
+        // La respuesta es JSON con { "id": "...", ... }
+        val fileId = org.json.JSONObject(responseBody).getString("id")
+        conn.disconnect()
+        return fileId
     }
 
     // ── Gemini ────────────────────────────────────────────────────────────────

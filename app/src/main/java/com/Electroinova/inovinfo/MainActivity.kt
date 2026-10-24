@@ -113,7 +113,7 @@ class MainActivity : ComponentActivity() {
                                         selected = selected,
                                         onClick  = {
                                             navController.navigate(item.screen.route) {
-                                                popUpTo(navController.graph.startDestinationId) {
+                                                popUpTo(Screen.NuevaVisita.route) {
                                                     saveState = true
                                                 }
                                                 launchSingleTop = true

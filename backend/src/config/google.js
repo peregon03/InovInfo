@@ -125,4 +125,71 @@ async function subirFotoDrive(fileBuffer, fileName, mimeType, sedeNombre) {
     return `https://drive.google.com/uc?id=${fileId}`;
 }
 
-module.exports = { getSheetsClient, getDriveClient, getAuth, subirFotoDrive };
+/**
+ * Crea una sesión de subida resumable en Google Drive.
+ * Devuelve { uploadUrl, fileId } — el cliente sube directo a uploadUrl con PUT.
+ */
+async function crearSesionSubida(fileName, mimeType, sedeNombre) {
+    const drive  = getDriveClient();
+    const auth   = getAuth();
+    const rootId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
+    // Resolver carpeta destino: raíz → año → sede → fecha
+    let targetFolder = rootId || null;
+    if (rootId) {
+        const ahora = new Date();
+        const anio  = ahora.getFullYear().toString();
+        const fecha = ahora.toISOString().split('T')[0];
+
+        const carpetaAnio = await obtenerOCrearCarpeta(drive, anio, rootId);
+        const carpetaSede = sedeNombre
+            ? await obtenerOCrearCarpeta(drive, sedeNombre, carpetaAnio)
+            : carpetaAnio;
+        targetFolder = await obtenerOCrearCarpeta(drive, fecha, carpetaSede);
+    }
+
+    // Obtener token de acceso
+    await auth.authorize();
+    const accessToken = auth.credentials.access_token;
+
+    // Iniciar sesión resumable con la API REST directamente
+    const metadata = JSON.stringify({
+        name:    fileName,
+        parents: targetFolder ? [targetFolder] : [],
+    });
+
+    const initRes = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
+        {
+            method: 'POST',
+            headers: {
+                'Authorization':           `Bearer ${accessToken}`,
+                'Content-Type':            'application/json; charset=UTF-8',
+                'X-Upload-Content-Type':   mimeType,
+            },
+            body: metadata,
+        }
+    );
+
+    if (!initRes.ok) {
+        const errText = await initRes.text();
+        throw new Error(`Error iniciando sesión resumable: ${initRes.status} — ${errText}`);
+    }
+
+    const uploadUrl = initRes.headers.get('location');
+    return { uploadUrl };
+}
+
+/**
+ * Hace público un archivo de Drive y devuelve su URL.
+ */
+async function hacerPublicoYObtenerUrl(fileId) {
+    const drive = getDriveClient();
+    await drive.permissions.create({
+        fileId,
+        requestBody: { role: 'reader', type: 'anyone' },
+    });
+    return `https://drive.google.com/uc?id=${fileId}`;
+}
+
+module.exports = { getSheetsClient, getDriveClient, getAuth, subirFotoDrive, crearSesionSubida, hacerPublicoYObtenerUrl };
