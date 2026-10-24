@@ -109,18 +109,30 @@ async function subirFotoDrive(fileBuffer, fileName, mimeType, sedeNombre) {
             body: stream,
         },
         fields: 'id',
+        supportsAllDrives: true,
     });
 
     const fileId = fileRes.data.id;
 
-    // Hacer el archivo público (cualquiera con el enlace puede leer)
-    await drive.permissions.create({
-        fileId,
-        requestBody: {
-            role: 'reader',
-            type: 'anyone',
-        },
-    });
+    // Transferir propiedad al usuario real (la service account no tiene cuota)
+    try {
+        await drive.permissions.create({
+            fileId,
+            transferOwnership: true,
+            requestBody: {
+                role:         'owner',
+                type:         'user',
+                emailAddress: process.env.GOOGLE_DRIVE_OWNER_EMAIL || 'electroinova.soluciones@gmail.com',
+            },
+        });
+    } catch (ownerErr) {
+        // Si falla la transferencia, al menos hacer público
+        console.warn('No se pudo transferir propiedad:', ownerErr.message);
+        await drive.permissions.create({
+            fileId,
+            requestBody: { role: 'reader', type: 'anyone' },
+        });
+    }
 
     return `https://drive.google.com/uc?id=${fileId}`;
 }
