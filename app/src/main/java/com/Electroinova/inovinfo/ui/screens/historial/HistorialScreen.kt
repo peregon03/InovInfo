@@ -52,6 +52,7 @@ fun HistorialScreen(
             )
             HistorialContent(
                 uiState   = uiState,
+                viewModel = viewModel,
                 onRefresh = onRefresh
             )
         }
@@ -200,6 +201,7 @@ private fun BusquedaContent(
 @Composable
 private fun HistorialContent(
     uiState:   HistorialUiState,
+    viewModel: HistorialViewModel,
     onRefresh: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -248,7 +250,11 @@ private fun HistorialContent(
             }
 
             items(uiState.visitas) { visita ->
-                VisitaHistorialCard(visita = visita)
+                VisitaHistorialCard(
+                    visita          = visita,
+                    esCoordinadora  = uiState.esCoordinadora,
+                    onEliminar      = { viewModel.eliminarVisita(it) }
+                )
             }
 
             item { Spacer(Modifier.height(12.dp)) }
@@ -295,9 +301,32 @@ private fun ResumenItem(valor: String, etiqueta: String) {
 // ── Tarjeta de una visita ──────────────────────────────────────────────────────
 
 @Composable
-private fun VisitaHistorialCard(visita: VisitaCompletaDto) {
-    var expandido by remember { mutableStateOf(false) }
+private fun VisitaHistorialCard(
+    visita:         VisitaCompletaDto,
+    esCoordinadora: Boolean = false,
+    onEliminar:     (Int) -> Unit = {}
+) {
+    var expandido        by remember { mutableStateOf(false) }
+    var mostrarDialogo   by remember { mutableStateOf(false) }
     val (bgEstado, fgEstado) = estadoColor(visita.estado)
+
+    // Diálogo de confirmación de eliminación
+    if (mostrarDialogo) {
+        AlertDialog(
+            onDismissRequest = { mostrarDialogo = false },
+            title            = { Text("Eliminar visita") },
+            text             = { Text("¿Eliminar esta visita? Esta acción no se puede deshacer.") },
+            confirmButton    = {
+                TextButton(onClick = {
+                    mostrarDialogo = false
+                    onEliminar(visita.id)
+                }) { Text("Confirmar", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton    = {
+                TextButton(onClick = { mostrarDialogo = false }) { Text("Cancelar") }
+            }
+        )
+    }
 
     Card(
         modifier  = Modifier.fillMaxWidth().clickable { expandido = !expandido },
@@ -306,7 +335,7 @@ private fun VisitaHistorialCard(visita: VisitaCompletaDto) {
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
 
-            // Fila superior: fecha + chip de estado
+            // Fila superior: fecha + chip de estado + botón eliminar (solo coordinadora)
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -316,16 +345,32 @@ private fun VisitaHistorialCard(visita: VisitaCompletaDto) {
                     formatearFecha(visita.created_at),
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
                 )
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = bgEstado
-                ) {
-                    Text(
-                        visita.estado,
-                        style    = MaterialTheme.typography.labelSmall,
-                        color    = fgEstado,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = bgEstado
+                    ) {
+                        Text(
+                            visita.estado,
+                            style    = MaterialTheme.typography.labelSmall,
+                            color    = fgEstado,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                    if (esCoordinadora) {
+                        Spacer(Modifier.width(4.dp))
+                        IconButton(
+                            onClick  = { mostrarDialogo = true },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Eliminar visita",
+                                tint               = Color(0xFFD32F2F),
+                                modifier           = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 }
             }
 

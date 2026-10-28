@@ -3,9 +3,12 @@ package com.Electroinova.inovinfo.ui.screens.historial
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.Electroinova.inovinfo.data.local.SessionManager
+import com.Electroinova.inovinfo.data.local.entity.toDto
 import com.Electroinova.inovinfo.data.remote.InovInfoApiService
 import com.Electroinova.inovinfo.data.remote.UnidadDto
 import com.Electroinova.inovinfo.data.remote.VisitaCompletaDto
+import com.Electroinova.inovinfo.data.repository.CatalogoRepository
+import com.Electroinova.inovinfo.data.repository.VisitaRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,13 +26,18 @@ data class HistorialUiState(
     // Historial de la unidad seleccionada
     val visitas:           List<VisitaCompletaDto> = emptyList(),
     val isLoading:         Boolean                 = false,
-    val error:             String?                 = null
+    val error:             String?                 = null,
+
+    // Permisos de rol
+    val esCoordinadora:    Boolean                 = false
 )
 
 @HiltViewModel
 class HistorialViewModel @Inject constructor(
     private val api:            InovInfoApiService,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val catalogoRepo:   CatalogoRepository,
+    private val visitaRepo:     VisitaRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HistorialUiState())
@@ -37,18 +45,22 @@ class HistorialViewModel @Inject constructor(
 
     init { cargarCatalogo() }
 
-    /** Carga el catálogo de unidades al iniciar. */
+    /** Colecta el catálogo de unidades desde Room y dispara un refresh desde el servidor. */
     private fun cargarCatalogo() {
+        _uiState.update { it.copy(esCoordinadora = sessionManager.esCoordinadora()) }
+
+        // Colectar unidades desde Room (actualización reactiva)
+        viewModelScope.launch {
+            catalogoRepo.getUnidades().collect { entities ->
+                _uiState.update { it.copy(unidades = entities.map { e -> e.toDto() }) }
+            }
+        }
+
+        // Refresh desde el servidor (si falla, Room ya tiene caché)
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            try {
-                val unidades = api.getUnidades(sessionManager.bearerToken())
-                _uiState.update { it.copy(unidades = unidades, isLoading = false) }
-            } catch (e: Exception) {
-                android.util.Log.e("HistorialVM", "Error catálogo: ${e.javaClass.simpleName} - ${e.message}", e)
-                val msg = mensajeError(e)
-                _uiState.update { it.copy(error = msg, isLoading = false) }
-            }
+            catalogoRepo.refreshCatalogos()
+            _uiState.update { it.copy(isLoading = false) }
         }
     }
 
@@ -73,17 +85,33 @@ class HistorialViewModel @Inject constructor(
         cargarHistorial(unidad.id)
     }
 
-    /** Llama al endpoint y almacena el historial de la unidad. */
+    /** Obtiene el historial de la unidad usando el repositorio (intenta servidor, cae a caché). */
     fun cargarHistorial(unidadId: Int) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val visitas = api.getVisitasPorUnidad(sessionManager.bearerToken(), unidadId)
+                val visitas = visitaRepo.getHistorial(unidadId)
                 _uiState.update { it.copy(visitas = visitas, isLoading = false) }
             } catch (e: Exception) {
                 android.util.Log.e("HistorialVM", "Error historial: ${e.javaClass.simpleName} - ${e.message}", e)
                 val msg = mensajeError(e)
                 _uiState.update { it.copy(error = msg, isLoading = false) }
+            }
+        }
+    }
+
+    /**
+     * Elimina una visita por ID y recarga el historial de la unidad seleccionada.
+     * Operación en línea únicamente (acción de administrador).
+     */
+    fun eliminarVisita(visitaId: Int) {
+        viewModelScope.launch {
+            try {
+                api.eliminarVisita(sessionManager.bearerToken(), visitaId)
+                _uiState.value.unidadSeleccionada?.let { cargarHistorial(it.id) }
+            } catch (e: Exception) {
+                android.util.Log.e("HistorialVM", "Error eliminar visita: ${e.javaClass.simpleName} - ${e.message}", e)
+                _uiState.update { it.copy(error = mensajeError(e)) }
             }
         }
     }

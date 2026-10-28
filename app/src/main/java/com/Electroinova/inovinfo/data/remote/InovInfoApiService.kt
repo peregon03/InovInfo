@@ -108,6 +108,18 @@ interface InovInfoApiService {
         @Body request: ActualizarEstadoRequest
     ): Map<String, String>
 
+    @DELETE("api/visitas/{id}")
+    suspend fun eliminarVisita(
+        @Header("Authorization") token: String,
+        @Path("id") id: Int
+    ): Map<String, String>
+
+    @GET("api/visitas/progreso")
+    suspend fun getProgreso(
+        @Header("Authorization") token: String,
+        @Query("dias") dias: Int = 15
+    ): ProgresoResponse
+
     // ── Informes ────────────────────────────────────────────────────────────
     @POST("api/informes/generar")
     suspend fun generarInforme(

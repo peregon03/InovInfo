@@ -6,7 +6,11 @@
       "Bash(./gradlew assembleDebug)",
       "Bash(node -e \":*)",
       "Bash(node:*)",
-      "Bash(./gradlew :app:compileDebugKotlin)"
+      "Bash(./gradlew :app:compileDebugKotlin)",
+      "Bash(git:*)",
+      "Bash(xargs grep:*)",
+      "Bash(cmd.exe /c \"cd /d \"\"D:\\\\Michael\\\\Electroinova\\\\Desarrollos app\\\\InovInfo\"\" && gradlew.bat :app:compileDebugKotlin 2>&1\")",
+      "Bash(powershell.exe -Command \"Set-Location 'D:\\\\Michael\\\\Electroinova\\\\Desarrollos app\\\\InovInfo'; .\\\\gradlew.bat :app:compileDebugKotlin 2>&1 | Select-Object -Last 80\")"
     ]
   }
 }

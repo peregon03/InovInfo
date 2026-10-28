@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.Electroinova.inovinfo.data.local.SessionManager
+import com.Electroinova.inovinfo.data.local.entity.toDto
 import com.Electroinova.inovinfo.data.remote.ActualizarSedeRequest
 import com.Electroinova.inovinfo.data.remote.ActualizarSuministroRequest
 import com.Electroinova.inovinfo.data.remote.ActualizarUnidadRequest
@@ -16,6 +17,7 @@ import com.Electroinova.inovinfo.data.remote.InovInfoApiService
 import com.Electroinova.inovinfo.data.remote.SedeDto
 import com.Electroinova.inovinfo.data.remote.SuministroDto
 import com.Electroinova.inovinfo.data.remote.UnidadDto
+import com.Electroinova.inovinfo.data.repository.CatalogoRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -67,6 +69,7 @@ data class AdminUiState(
 class AdminViewModel @Inject constructor(
     private val apiService:     InovInfoApiService,
     private val sessionManager: SessionManager,
+    private val catalogoRepo:   CatalogoRepository,
     private val app:            Application
 ) : AndroidViewModel(app) {
 
@@ -74,6 +77,23 @@ class AdminViewModel @Inject constructor(
     val uiState: StateFlow<AdminUiState> = _uiState.asStateFlow()
 
     init {
+        // Colectar sedes, unidades y suministros desde Room (actualización reactiva)
+        viewModelScope.launch {
+            catalogoRepo.getSedes().collect { entities ->
+                _uiState.update { it.copy(sedes = entities.map { e -> e.toDto() }) }
+            }
+        }
+        viewModelScope.launch {
+            catalogoRepo.getUnidades().collect { entities ->
+                _uiState.update { it.copy(unidades = entities.map { e -> e.toDto() }) }
+            }
+        }
+        viewModelScope.launch {
+            catalogoRepo.getSuministros().collect { entities ->
+                _uiState.update { it.copy(suministros = entities.map { e -> e.toDto() }) }
+            }
+        }
+        // Refresh inicial desde el servidor
         cargarSedes()
         cargarUnidades()
         cargarSuministros()
@@ -83,9 +103,8 @@ class AdminViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(sedesLoading = true) }
             try {
-                val token = sessionManager.bearerToken()
-                val sedes = apiService.getSedes(token)
-                _uiState.update { it.copy(sedes = sedes, sedesLoading = false) }
+                catalogoRepo.refreshCatalogos()
+                _uiState.update { it.copy(sedesLoading = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(sedesLoading = false) }
             }
@@ -96,9 +115,8 @@ class AdminViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(unidadesLoading = true) }
             try {
-                val token    = sessionManager.bearerToken()
-                val unidades = apiService.getUnidades(token)
-                _uiState.update { it.copy(unidades = unidades, unidadesLoading = false) }
+                catalogoRepo.refreshCatalogos()
+                _uiState.update { it.copy(unidadesLoading = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(unidadesLoading = false) }
             }
@@ -116,7 +134,8 @@ class AdminViewModel @Inject constructor(
                 val token = sessionManager.bearerToken()
                 apiService.crearSede(token, CrearSedeRequest(nombre.trim()))
                 _uiState.update { it.copy(crearSedeLoading = false, mensajeExito = "Sede '${nombre.trim()}' creada correctamente") }
-                cargarSedes()
+                // Actualizar caché en Room tras la operación
+                catalogoRepo.refreshCatalogos()
             } catch (e: retrofit2.HttpException) {
                 val msg = if (e.code() == 409) "Ya existe una sede con ese nombre" else "Error al crear la sede"
                 _uiState.update { it.copy(crearSedeLoading = false, error = msg) }
@@ -137,8 +156,8 @@ class AdminViewModel @Inject constructor(
                 val token = sessionManager.bearerToken()
                 apiService.actualizarSede(token, id, ActualizarSedeRequest(nombre.trim(), activa = true))
                 _uiState.update { it.copy(mensajeExito = "Sede actualizada correctamente") }
-                cargarSedes()
-                cargarUnidades()
+                // Actualizar caché en Room tras la operación
+                catalogoRepo.refreshCatalogos()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "No se pudo actualizar la sede") }
             }
@@ -156,7 +175,8 @@ class AdminViewModel @Inject constructor(
                 val token = sessionManager.bearerToken()
                 apiService.crearUnidad(token, CrearUnidadRequest(numero.trim(), sedeId))
                 _uiState.update { it.copy(crearUnidadLoading = false, mensajeExito = "Unidad '${numero.trim()}' creada correctamente") }
-                cargarUnidades()
+                // Actualizar caché en Room tras la operación
+                catalogoRepo.refreshCatalogos()
             } catch (e: retrofit2.HttpException) {
                 val msg = if (e.code() == 409) "Ya existe una unidad con ese número en esa sede" else "Error al crear la unidad"
                 _uiState.update { it.copy(crearUnidadLoading = false, error = msg) }
@@ -177,7 +197,8 @@ class AdminViewModel @Inject constructor(
                 val token = sessionManager.bearerToken()
                 apiService.actualizarUnidad(token, id, ActualizarUnidadRequest(numero.trim(), sedeId, activa))
                 _uiState.update { it.copy(mensajeExito = "Unidad actualizada correctamente") }
-                cargarUnidades()
+                // Actualizar caché en Room tras la operación
+                catalogoRepo.refreshCatalogos()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "No se pudo actualizar la unidad") }
             }
@@ -191,7 +212,8 @@ class AdminViewModel @Inject constructor(
                 val token = sessionManager.bearerToken()
                 apiService.eliminarUnidad(token, id)
                 _uiState.update { it.copy(mensajeExito = "Unidad eliminada correctamente") }
-                cargarUnidades()
+                // Actualizar caché en Room tras la operación
+                catalogoRepo.refreshCatalogos()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "No se pudo eliminar la unidad") }
             }
@@ -202,9 +224,8 @@ class AdminViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(suministrosLoading = true) }
             try {
-                val token       = sessionManager.bearerToken()
-                val suministros = apiService.getSuministros(token)
-                _uiState.update { it.copy(suministros = suministros, suministrosLoading = false) }
+                catalogoRepo.refreshCatalogos()
+                _uiState.update { it.copy(suministrosLoading = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(suministrosLoading = false) }
             }
@@ -229,7 +250,8 @@ class AdminViewModel @Inject constructor(
                     )
                 )
                 _uiState.update { it.copy(mensajeExito = "Suministro '${nombre.trim()}' creado correctamente") }
-                cargarSuministros()
+                // Actualizar caché en Room tras la operación
+                catalogoRepo.refreshCatalogos()
             } catch (e: retrofit2.HttpException) {
                 val msg = if (e.code() == 409) "Ya existe un suministro con ese nombre" else "Error al crear el suministro"
                 _uiState.update { it.copy(error = msg) }
@@ -258,7 +280,8 @@ class AdminViewModel @Inject constructor(
                     )
                 )
                 _uiState.update { it.copy(mensajeExito = "Suministro actualizado correctamente") }
-                cargarSuministros()
+                // Actualizar caché en Room tras la operación
+                catalogoRepo.refreshCatalogos()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "No se pudo actualizar el suministro") }
             }
@@ -296,8 +319,8 @@ class AdminViewModel @Inject constructor(
                         mensajeExito         = msg
                     )
                 }
-                cargarSedes()
-                cargarUnidades()
+                // Actualizar caché en Room con los datos importados
+                catalogoRepo.refreshCatalogos()
             } catch (e: Exception) {
                 _uiState.update { it.copy(importando = false, error = "Error al importar: ${e.message}") }
             }

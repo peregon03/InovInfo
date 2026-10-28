@@ -302,18 +302,21 @@ fun NuevaVisitaScreen(
                                     verticalArrangement   = Arrangement.spacedBy(4.dp)
                                 ) {
                                     sedeActiva.unidadesSede.forEach { unidad ->
-                                        val revisada = unidad.numero in sedeActiva.unidadesRevisadas
+                                        val revisada      = unidad.numero in sedeActiva.unidadesRevisadas
+                                        val estadoUnidad  = sedeActiva.unidadesRevisadas[unidad.numero]
+                                        val esInoperativa = estadoUnidad == "Inoperativa"
                                         Surface(
                                             shape    = RoundedCornerShape(6.dp),
-                                            color    = if (revisada) Color(0xFF2E7D32)
-                                                       else MaterialTheme.colorScheme.surfaceVariant,
+                                            color    = if (revisada) {
+                                                           if (esInoperativa) Color(0xFFC62828) else Color(0xFF2E7D32)
+                                                       } else MaterialTheme.colorScheme.surfaceVariant,
                                             modifier = Modifier.clickable { viewModel.onUnidadSelect(unidad) }
                                         ) {
                                             Text(
                                                 unidad.numero,
                                                 style      = MaterialTheme.typography.labelSmall,
                                                 fontWeight = if (revisada) FontWeight.Bold else FontWeight.Normal,
-                                                color      = if (revisada) Color.Black
+                                                color      = if (revisada) Color.White
                                                              else MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier   = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                             )
@@ -546,7 +549,7 @@ fun NuevaVisitaScreen(
                                 DropdownMenuItem(
                                     text = {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            if (item.id in uiState.suministrosSeleccionados) {
+                                            if (item.id in uiState.suministrosSeleccionados.keys) {
                                                 Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                                                 Spacer(Modifier.width(8.dp))
                                             }
@@ -560,16 +563,50 @@ fun NuevaVisitaScreen(
                     }
                     if (uiState.suministrosSeleccionados.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             uiState.suministrosCatalogo
-                                .filter { it.id in uiState.suministrosSeleccionados }
+                                .filter { it.id in uiState.suministrosSeleccionados.keys }
                                 .forEach { item ->
-                                    InputChip(
-                                        selected = true,
-                                        onClick  = { viewModel.onSuministroToggle(item.id) },
-                                        label    = { Text(item.nombre, style = MaterialTheme.typography.labelSmall) },
-                                        colors   = InputChipDefaults.inputChipColors(selectedContainerColor = MaterialTheme.colorScheme.primaryContainer)
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier          = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                item.nombre,
+                                                style    = MaterialTheme.typography.labelMedium,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            IconButton(
+                                                onClick  = { viewModel.onSuministroCantidadChange(item.id, -1) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.Remove, contentDescription = "Disminuir", modifier = Modifier.size(16.dp))
+                                            }
+                                            Text(
+                                                "${uiState.suministrosSeleccionados[item.id] ?: 1}",
+                                                style      = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier   = Modifier.padding(horizontal = 4.dp)
+                                            )
+                                            IconButton(
+                                                onClick  = { viewModel.onSuministroCantidadChange(item.id, 1) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.Add, contentDescription = "Aumentar", modifier = Modifier.size(16.dp))
+                                            }
+                                            IconButton(
+                                                onClick  = { viewModel.onSuministroToggle(item.id) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.Close, contentDescription = "Eliminar", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                            }
+                                        }
+                                    }
                                 }
                         }
                     }

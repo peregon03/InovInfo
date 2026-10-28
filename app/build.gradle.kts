@@ -96,6 +96,11 @@ dependencies {
     // Coil (carga de imágenes desde URI local en PhotoGrid)
     implementation("io.coil-kt:coil-compose:2.6.0")
 
+    // WorkManager (sincronización en segundo plano, modo offline)
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 

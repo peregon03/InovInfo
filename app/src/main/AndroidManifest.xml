@@ -4,6 +4,7 @@
 
     <!-- ── Permisos de red ─────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- ── Cámara y almacenamiento (fotos de visitas técnicas) ─────────────── -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -42,6 +43,18 @@
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- HiltWorkerFactory: necesario para @HiltWorker / @AssistedInject en SyncWorker -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
         </provider>
 
         <activity

@@ -1,19 +1,26 @@
 const { google } = require('googleapis');
 
 /**
- * Autenticación con cuenta de servicio de Google.
+ * Autenticación Google:
+ *   - Sheets: cuenta de servicio (JWT)
+ *   - Drive:  OAuth2 con refresh token (cuenta real con cuota de almacenamiento)
  *
  * Variables de entorno requeridas:
  *   GOOGLE_SERVICE_ACCOUNT_EMAIL  — email de la cuenta de servicio
  *   GOOGLE_PRIVATE_KEY            — clave privada (con \n reales)
  *   GOOGLE_SHEET_ID               — ID del archivo de Google Sheets destino
- *   GOOGLE_DRIVE_FOLDER_ID        — ID de la carpeta raíz en Drive para fotos (opcional)
+ *   GOOGLE_DRIVE_FOLDER_ID        — ID de la carpeta raíz en Drive para fotos
+ *   GOOGLE_OAUTH_CLIENT_ID        — OAuth2 client ID
+ *   GOOGLE_OAUTH_CLIENT_SECRET    — OAuth2 client secret
+ *   GOOGLE_OAUTH_REFRESH_TOKEN    — Refresh token de la cuenta dueña del Drive
  */
 
-let _sheets = null;
-let _drive  = null;
+let _sheets   = null;
+let _drive    = null;
+let _oauthDrive = null;
 
-function getAuth() {
+// ── Auth: Service Account (para Sheets) ─────────────────────────────────────
+function getServiceAuth() {
     const key = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
     return new google.auth.JWT(
         process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -26,18 +33,43 @@ function getAuth() {
     );
 }
 
+// ── Auth: OAuth2 (para Drive — cuenta real con cuota) ───────────────────────
+function getOAuth2Client() {
+    const oauth2 = new google.auth.OAuth2(
+        process.env.GOOGLE_OAUTH_CLIENT_ID,
+        process.env.GOOGLE_OAUTH_CLIENT_SECRET
+    );
+    oauth2.setCredentials({
+        refresh_token: process.env.GOOGLE_OAUTH_REFRESH_TOKEN,
+    });
+    return oauth2;
+}
+
 function getSheetsClient() {
     if (!_sheets) {
-        _sheets = google.sheets({ version: 'v4', auth: getAuth() });
+        _sheets = google.sheets({ version: 'v4', auth: getServiceAuth() });
     }
     return _sheets;
 }
 
+// Drive con OAuth2 (cuenta real) — fallback a service account si no hay OAuth
 function getDriveClient() {
+    if (process.env.GOOGLE_OAUTH_REFRESH_TOKEN) {
+        if (!_oauthDrive) {
+            _oauthDrive = google.drive({ version: 'v3', auth: getOAuth2Client() });
+        }
+        return _oauthDrive;
+    }
+    // Fallback: service account (funciona para listar/crear carpetas compartidas)
     if (!_drive) {
-        _drive = google.drive({ version: 'v3', auth: getAuth() });
+        _drive = google.drive({ version: 'v3', auth: getServiceAuth() });
     }
     return _drive;
+}
+
+// Mantener compatibilidad con getAuth() usado en informeService
+function getAuth() {
+    return getServiceAuth();
 }
 
 /**
@@ -98,7 +130,7 @@ async function subirFotoDrive(fileBuffer, fileName, mimeType, sedeNombre) {
     const { Readable } = require('stream');
     const stream = Readable.from(fileBuffer);
 
-    // Crear el archivo en Drive
+    // Crear el archivo en Drive (como la cuenta OAuth2 — tiene cuota)
     const fileRes = await drive.files.create({
         requestBody: {
             name:    fileName,
@@ -109,99 +141,20 @@ async function subirFotoDrive(fileBuffer, fileName, mimeType, sedeNombre) {
             body: stream,
         },
         fields: 'id',
-        supportsAllDrives: true,
     });
 
     const fileId = fileRes.data.id;
 
-    // Transferir propiedad al usuario real (la service account no tiene cuota)
-    try {
-        await drive.permissions.create({
-            fileId,
-            transferOwnership: true,
-            requestBody: {
-                role:         'owner',
-                type:         'user',
-                emailAddress: process.env.GOOGLE_DRIVE_OWNER_EMAIL || 'electroinova.soluciones@gmail.com',
-            },
-        });
-    } catch (ownerErr) {
-        // Si falla la transferencia, al menos hacer público
-        console.warn('No se pudo transferir propiedad:', ownerErr.message);
-        await drive.permissions.create({
-            fileId,
-            requestBody: { role: 'reader', type: 'anyone' },
-        });
-    }
-
-    return `https://drive.google.com/uc?id=${fileId}`;
-}
-
-/**
- * Crea una sesión de subida resumable en Google Drive.
- * Devuelve { uploadUrl, fileId } — el cliente sube directo a uploadUrl con PUT.
- */
-async function crearSesionSubida(fileName, mimeType, sedeNombre) {
-    const drive  = getDriveClient();
-    const auth   = getAuth();
-    const rootId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-
-    // Resolver carpeta destino: raíz → año → sede → fecha
-    let targetFolder = rootId || null;
-    if (rootId) {
-        const ahora = new Date();
-        const anio  = ahora.getFullYear().toString();
-        const fecha = ahora.toISOString().split('T')[0];
-
-        const carpetaAnio = await obtenerOCrearCarpeta(drive, anio, rootId);
-        const carpetaSede = sedeNombre
-            ? await obtenerOCrearCarpeta(drive, sedeNombre, carpetaAnio)
-            : carpetaAnio;
-        targetFolder = await obtenerOCrearCarpeta(drive, fecha, carpetaSede);
-    }
-
-    // Obtener token de acceso
-    await auth.authorize();
-    const accessToken = auth.credentials.access_token;
-
-    // Iniciar sesión resumable con la API REST directamente
-    const metadata = JSON.stringify({
-        name:    fileName,
-        parents: targetFolder ? [targetFolder] : [],
-    });
-
-    const initRes = await fetch(
-        'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable',
-        {
-            method: 'POST',
-            headers: {
-                'Authorization':           `Bearer ${accessToken}`,
-                'Content-Type':            'application/json; charset=UTF-8',
-                'X-Upload-Content-Type':   mimeType,
-            },
-            body: metadata,
-        }
-    );
-
-    if (!initRes.ok) {
-        const errText = await initRes.text();
-        throw new Error(`Error iniciando sesión resumable: ${initRes.status} — ${errText}`);
-    }
-
-    const uploadUrl = initRes.headers.get('location');
-    return { uploadUrl };
-}
-
-/**
- * Hace público un archivo de Drive y devuelve su URL.
- */
-async function hacerPublicoYObtenerUrl(fileId) {
-    const drive = getDriveClient();
+    // Hacer el archivo público (cualquiera con el enlace puede leer)
     await drive.permissions.create({
         fileId,
-        requestBody: { role: 'reader', type: 'anyone' },
+        requestBody: {
+            role: 'reader',
+            type: 'anyone',
+        },
     });
+
     return `https://drive.google.com/uc?id=${fileId}`;
 }
 
-module.exports = { getSheetsClient, getDriveClient, getAuth, subirFotoDrive, crearSesionSubida, hacerPublicoYObtenerUrl };
+module.exports = { getSheetsClient, getDriveClient, getAuth, subirFotoDrive };

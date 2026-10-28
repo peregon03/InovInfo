@@ -16,6 +16,7 @@ okhttp = "4.12.0"
 hilt = "2.51.1"
 hiltNavigationCompose = "1.2.0"
 coroutines = "1.8.1"
+workmanager = "2.10.0"
 
 [libraries]
 # Core AndroidX
@@ -56,6 +57,11 @@ okhttp-logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-i
 
 # Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# WorkManager
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workmanager" }
+androidx-hilt-work = { group = "androidx.hilt", name = "hilt-work", version = "1.2.0" }
+androidx-hilt-compiler = { group = "androidx.hilt", name = "hilt-compiler", version = "1.2.0" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

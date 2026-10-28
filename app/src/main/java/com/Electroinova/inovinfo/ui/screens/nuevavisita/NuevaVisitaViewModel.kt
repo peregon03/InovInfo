@@ -6,17 +6,27 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.Electroinova.inovinfo.BuildConfig
+import com.Electroinova.inovinfo.core.sync.ConnectivityObserver
 import com.Electroinova.inovinfo.data.local.SessionManager
-import com.Electroinova.inovinfo.data.remote.*
+import com.Electroinova.inovinfo.data.local.entity.toDto
+import com.Electroinova.inovinfo.data.remote.EstadoDto
+import com.Electroinova.inovinfo.data.remote.GeminiContent
+import com.Electroinova.inovinfo.data.remote.GeminiPart
+import com.Electroinova.inovinfo.data.remote.GeminiRequest
+import com.Electroinova.inovinfo.data.remote.GeminiService
+import com.Electroinova.inovinfo.data.remote.PendienteDto
+import com.Electroinova.inovinfo.data.remote.SuministroDto
+import com.Electroinova.inovinfo.data.remote.UnidadDto
+import com.Electroinova.inovinfo.data.remote.VisitaHoyDto
+import com.Electroinova.inovinfo.data.remote.textoGenerado
+import com.Electroinova.inovinfo.data.repository.CatalogoRepository
+import com.Electroinova.inovinfo.data.repository.VisitaRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 
 // ── Estado UI ─────────────────────────────────────────────────────────────────
@@ -25,7 +35,7 @@ data class SedeProgreso(
     val sedeId:            Int,
     val sedeNombre:        String,
     val unidadesSede:      List<UnidadDto>,
-    val unidadesRevisadas: Set<String>
+    val unidadesRevisadas: Map<String, String> = emptyMap()
 )
 
 sealed interface GeminiUiState {
@@ -56,7 +66,7 @@ data class NuevaVisitaUiState(
     val estadoSeleccionado:      EstadoDto?  = null,
     val novedadTecnico:          String      = "",
     val observacion:             String      = OBSERVACION_OK_DEFAULT,
-    val suministrosSeleccionados: Set<Int>   = emptySet(),
+    val suministrosSeleccionados: Map<Int, Int> = emptyMap(),
     val requiereSeguimiento:     Boolean     = false,
     val fechaSeguimiento:        String      = "",
     val notaSeguimiento:         String      = "",
@@ -69,6 +79,9 @@ data class NuevaVisitaUiState(
 
     // Rol
     val esCoordinadora: Boolean = false,
+
+    // Conectividad
+    val isOnline: Boolean = true,
 
     // Progreso del día (multi-sede)
     val visitasHoy:           List<VisitaHoyDto>  = emptyList(),
@@ -105,8 +118,10 @@ private const val TAG = "NuevaVisitaVM"
 @HiltViewModel
 class NuevaVisitaViewModel @Inject constructor(
     private val geminiService:  GeminiService,
-    private val inovInfoApi:    InovInfoApiService,
     private val sessionManager: SessionManager,
+    private val catalogoRepo:   CatalogoRepository,
+    private val visitaRepo:     VisitaRepository,
+    private val connectivity:   ConnectivityObserver,
     private val app:            Application
 ) : AndroidViewModel(app) {
 
@@ -126,40 +141,83 @@ class NuevaVisitaViewModel @Inject constructor(
                 esCoordinadora   = sessionManager.esCoordinadora()
             )
         }
-        cargarCatalogos()
+
+        // Colectar catálogos desde Room
+        viewModelScope.launch {
+            catalogoRepo.getUnidades().collect { entities ->
+                _uiState.update { it.copy(unidades = entities.map { e -> e.toDto() }) }
+            }
+        }
+        viewModelScope.launch {
+            catalogoRepo.getSuministros().collect { entities ->
+                _uiState.update { it.copy(suministrosCatalogo = entities.map { e -> e.toDto() }) }
+            }
+        }
+        viewModelScope.launch {
+            catalogoRepo.getEstados().collect { entities ->
+                val dtos = entities.map { e -> e.toDto() }
+                val estadoOk = dtos.firstOrNull { it.nombre == "OK" }
+                _uiState.update { it.copy(estados = dtos, estadoSeleccionado = it.estadoSeleccionado ?: estadoOk) }
+            }
+        }
+
+        // Colectar visitas del día desde Room
+        viewModelScope.launch {
+            visitaRepo.getVisitasHoy().collect { visitasHoy ->
+                val visitasPorSede = visitasHoy.groupBy { it.sede_id }
+                val todasUnidades  = _uiState.value.unidades
+                val sedesProgreso = visitasPorSede.map { (sedeId, visitas) ->
+                    val sedeNombre = visitas.first().sede_nombre
+                    val revisadas  = visitas.associate { it.unidad_numero to it.estado }
+                    val unidadesDeSede = todasUnidades.filter { it.sede_id == sedeId }
+                    SedeProgreso(
+                        sedeId            = sedeId,
+                        sedeNombre        = sedeNombre,
+                        unidadesSede      = unidadesDeSede,
+                        unidadesRevisadas = revisadas
+                    )
+                }
+                _uiState.update {
+                    it.copy(
+                        visitasHoy         = visitasHoy,
+                        sedesVisitadas     = sedesProgreso,
+                        sedeProgresoActiva = sedesProgreso.firstOrNull()?.sedeId
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            visitaRepo.getPendientes().collect { pendientes ->
+                _uiState.update { it.copy(pendientes = pendientes) }
+            }
+        }
+
+        // Colectar conectividad
+        viewModelScope.launch {
+            connectivity.isOnline.collect { online ->
+                _uiState.update { it.copy(isOnline = online) }
+            }
+        }
+
+        // Refresh inicial (fire and forget — si falla se usa el caché de Room)
+        viewModelScope.launch {
+            catalogoRepo.refreshCatalogos()
+            _uiState.update { it.copy(catalogosLoading = false) }
+        }
+        viewModelScope.launch {
+            visitaRepo.refreshVisitasHoy()
+            visitaRepo.refreshPendientes()
+        }
     }
 
     // ── Catálogos ─────────────────────────────────────────────────────────────
 
+    /** Fuerza un refresh manual de catálogos desde el servidor. */
     fun cargarCatalogos() {
         viewModelScope.launch {
             _uiState.update { it.copy(catalogosLoading = true, errorCatalogos = null) }
-            try {
-                val token       = sessionManager.bearerToken()
-                val unidades    = inovInfoApi.getUnidades(token)
-                val suministros = inovInfoApi.getSuministros(token)
-                val estados     = inovInfoApi.getEstados(token)
-                val estadoOk    = estados.firstOrNull { it.nombre == "OK" }
-                _uiState.update {
-                    it.copy(
-                        unidades            = unidades,
-                        suministrosCatalogo = suministros,
-                        estados             = estados,
-                        estadoSeleccionado  = estadoOk,
-                        catalogosLoading    = false
-                    )
-                }
-                cargarProgresoHoy()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error cargando catálogos: ${e.javaClass.simpleName} - ${e.message}", e)
-                val msg = when (e) {
-                    is java.net.UnknownHostException,
-                    is java.net.ConnectException -> "Sin conexión al servidor"
-                    is retrofit2.HttpException -> "Error del servidor: ${e.code()}"
-                    else -> "Error: ${e.message}"
-                }
-                _uiState.update { it.copy(catalogosLoading = false, errorCatalogos = msg) }
-            }
+            catalogoRepo.refreshCatalogos()
+            _uiState.update { it.copy(catalogosLoading = false) }
         }
     }
 
@@ -195,7 +253,7 @@ class NuevaVisitaViewModel @Inject constructor(
                     sedeId            = unidad.sede_id,
                     sedeNombre        = unidad.sede_nombre,
                     unidadesSede      = state.unidades.filter { it.sede_id == unidad.sede_id },
-                    unidadesRevisadas = emptySet()
+                    unidadesRevisadas = emptyMap()
                 )
             } else state.sedesVisitadas
 
@@ -206,45 +264,6 @@ class NuevaVisitaViewModel @Inject constructor(
                 sedesVisitadas       = sedesActualizadas,
                 sedeProgresoActiva   = unidad.sede_id
             )
-        }
-    }
-
-    // ── Progreso del día ──────────────────────────────────────────────────────
-
-    private fun cargarProgresoHoy() {
-        viewModelScope.launch {
-            try {
-                val token      = sessionManager.bearerToken()
-                val visitasHoy = inovInfoApi.getVisitasHoy(token)
-                val pendientes = inovInfoApi.getPendientes(token)
-
-                // Agrupar visitas por sede para soporte multi-sede
-                val visitasPorSede = visitasHoy.groupBy { it.sede_id }
-                val todasUnidades  = _uiState.value.unidades
-
-                val sedesProgreso = visitasPorSede.map { (sedeId, visitas) ->
-                    val sedeNombre = visitas.first().sede_nombre
-                    val revisadas  = visitas.map { it.unidad_numero }.toSet()
-                    val unidadesDeSede = todasUnidades.filter { it.sede_id == sedeId }
-                    SedeProgreso(
-                        sedeId            = sedeId,
-                        sedeNombre        = sedeNombre,
-                        unidadesSede      = unidadesDeSede,
-                        unidadesRevisadas = revisadas
-                    )
-                }
-
-                _uiState.update {
-                    it.copy(
-                        visitasHoy         = visitasHoy,
-                        pendientes         = pendientes,
-                        sedesVisitadas     = sedesProgreso,
-                        sedeProgresoActiva = sedesProgreso.firstOrNull()?.sedeId
-                    )
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Error cargando progreso: ${e.message}")
-            }
         }
     }
 
@@ -269,7 +288,17 @@ class NuevaVisitaViewModel @Inject constructor(
         val nuevos = if (id in state.suministrosSeleccionados)
             state.suministrosSeleccionados - id
         else
-            state.suministrosSeleccionados + id
+            state.suministrosSeleccionados + (id to 1)
+        state.copy(suministrosSeleccionados = nuevos)
+    }
+
+    fun onSuministroCantidadChange(id: Int, delta: Int) = _uiState.update { state ->
+        val cantidadActual = state.suministrosSeleccionados[id] ?: return@update state
+        val nuevaCantidad  = cantidadActual + delta
+        val nuevos = if (nuevaCantidad < 1)
+            state.suministrosSeleccionados - id
+        else
+            state.suministrosSeleccionados + (id to nuevaCantidad)
         state.copy(suministrosSeleccionados = nuevos)
     }
 
@@ -293,62 +322,30 @@ class NuevaVisitaViewModel @Inject constructor(
     // ── Guardar visita ────────────────────────────────────────────────────────
 
     fun guardarVisita() {
-        val unidad = _uiState.value.unidadSeleccionada
-        val estado = _uiState.value.estadoSeleccionado
-
-        if (unidad == null) {
-            _uiState.update { it.copy(errorGuardar = "Selecciona una unidad") }
-            return
+        val unidad = _uiState.value.unidadSeleccionada ?: run {
+            _uiState.update { it.copy(errorGuardar = "Selecciona una unidad") }; return
         }
-        if (estado == null) {
-            _uiState.update { it.copy(errorGuardar = "Selecciona un estado") }
-            return
+        val estado = _uiState.value.estadoSeleccionado ?: run {
+            _uiState.update { it.copy(errorGuardar = "Selecciona un estado") }; return
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(guardando = true, errorGuardar = null) }
             try {
-                val token       = sessionManager.bearerToken()
-                val suministros = _uiState.value.suministrosSeleccionados.map {
-                    SuministroRequest(suministro_id = it, cantidad = 1)
-                }
-
-                // 1. Crear la visita y obtener su ID
-                val visitaMap = inovInfoApi.crearVisita(
-                    token   = token,
-                    request = CrearVisitaRequest(
-                        unidad_id                = unidad.id,
-                        estado_id                = estado.id,
-                        novedad_texto            = _uiState.value.novedadTecnico.ifBlank { null },
-                        observacion_estructurada = _uiState.value.observacion,
-                        requiere_seguimiento     = _uiState.value.requiereSeguimiento,
-                        fecha_seguimiento        = _uiState.value.fechaSeguimiento.ifBlank { null },
-                        nota_seguimiento         = _uiState.value.notaSeguimiento.ifBlank { null },
-                        suministros              = suministros
-                    )
+                val localId = visitaRepo.guardarVisitaLocal(
+                    unidadId                = unidad.id,
+                    estadoId                = estado.id,
+                    novedadTexto            = _uiState.value.novedadTecnico.ifBlank { null },
+                    observacionEstructurada = _uiState.value.observacion,
+                    requiereSeguimiento     = _uiState.value.requiereSeguimiento,
+                    fechaSeguimiento        = _uiState.value.fechaSeguimiento.ifBlank { null },
+                    notaSeguimiento         = _uiState.value.notaSeguimiento.ifBlank { null },
+                    suministros             = _uiState.value.suministrosSeleccionados,
+                    fotosUri                = _uiState.value.fotos
                 )
-                val visitaId = (visitaMap["id"] as? Double)?.toInt()
-                    ?: (visitaMap["id"] as? Number)?.toInt()
-                Log.d(TAG, "Visita creada — id=$visitaId, keys=${visitaMap.keys}, fotos=${_uiState.value.fotos.size}")
+                Log.d(TAG, "Visita guardada localmente — localId=$localId")
 
-                // 2. Subir fotos comprimidas al servidor → Drive
-                val fotosASubir = _uiState.value.fotos
-                if (visitaId != null && fotosASubir.isNotEmpty()) {
-                    fotosASubir.forEachIndexed { index, uri ->
-                        _uiState.update {
-                            it.copy(progresoFotos = "Subiendo foto ${index + 1}/${fotosASubir.size}...")
-                        }
-                        try {
-                            val part = comprimirYCrearPart(uri, index + 1)
-                            inovInfoApi.subirFoto(token, visitaId, part)
-                            Log.d(TAG, "Foto ${index + 1} subida correctamente")
-                        } catch (e: Exception) {
-                            Log.w(TAG, "No se pudo subir foto ${index + 1}: ${e.message}")
-                        }
-                    }
-                }
-
-                // 3. Reset conservando catálogos e info de usuario
+                // Resetear formulario conservando catálogos e info de usuario
                 val snap     = _uiState.value
                 val estadoOk = snap.estados.firstOrNull { it.nombre == "OK" }
                 _uiState.update {
@@ -360,19 +357,21 @@ class NuevaVisitaViewModel @Inject constructor(
                         estados              = snap.estados,
                         catalogosLoading     = false,
                         estadoSeleccionado   = estadoOk,
+                        esCoordinadora       = snap.esCoordinadora,
+                        isOnline             = snap.isOnline,
                         guardadoExitoso      = true
                     )
                 }
-                cargarProgresoHoy()
+
+                // Sincronizar en background (fire and forget)
+                launch {
+                    visitaRepo.syncPendingVisitas()
+                    visitaRepo.syncPendingFotos()
+                    visitaRepo.refreshVisitasHoy()
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error guardando visita: ${e.javaClass.simpleName} - ${e.message}", e)
-                val msg = when (e) {
-                    is java.net.UnknownHostException,
-                    is java.net.ConnectException -> "Sin conexión al servidor"
-                    is retrofit2.HttpException -> "Error del servidor: ${e.code()} - ${e.response()?.errorBody()?.string()}"
-                    else -> "Error: ${e.javaClass.simpleName} - ${e.message}"
-                }
-                _uiState.update { it.copy(errorGuardar = msg, guardando = false) }
+                _uiState.update { it.copy(errorGuardar = "Error: ${e.message}", guardando = false) }
             }
         }
     }
@@ -383,42 +382,6 @@ class NuevaVisitaViewModel @Inject constructor(
     fun onSedeProgresoChange(sedeId: Int) =
         _uiState.update { it.copy(sedeProgresoActiva = sedeId) }
 
-    // ── Utilidades de fotos ───────────────────────────────────────────────────
-
-    /**
-     * Comprime un [Uri] a JPEG ≤ 4 MB, máx 1920px, y devuelve un MultipartBody.Part.
-     */
-    private suspend fun comprimirYCrearPart(uri: Uri, index: Int): MultipartBody.Part =
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val inputStream = app.contentResolver.openInputStream(uri)!!
-            val original = android.graphics.BitmapFactory.decodeStream(inputStream)
-            inputStream.close()
-
-            val maxSide = 1920
-            val scaled = if (original.width > maxSide || original.height > maxSide) {
-                val ratio = maxSide.toFloat() / maxOf(original.width, original.height)
-                val newW = (original.width * ratio).toInt()
-                val newH = (original.height * ratio).toInt()
-                android.graphics.Bitmap.createScaledBitmap(original, newW, newH, true).also {
-                    if (it !== original) original.recycle()
-                }
-            } else original
-
-            var quality = 85
-            var bytes: ByteArray
-            do {
-                val baos = java.io.ByteArrayOutputStream()
-                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, baos)
-                bytes = baos.toByteArray()
-                quality -= 10
-            } while (bytes.size > 4 * 1024 * 1024 && quality > 10)
-            scaled.recycle()
-
-            Log.d(TAG, "Foto $index comprimida: ${bytes.size / 1024}KB, quality=${quality + 10}")
-            val requestBody = bytes.toRequestBody("image/jpeg".toMediaType())
-            MultipartBody.Part.createFormData("foto", "foto_$index.jpg", requestBody)
-        }
-
     // ── Gemini ────────────────────────────────────────────────────────────────
 
     fun estructurarObservacion() {
@@ -426,7 +389,7 @@ class NuevaVisitaViewModel @Inject constructor(
         if (novedad.isBlank()) return
 
         val suministrosNombres = _uiState.value.suministrosCatalogo
-            .filter { it.id in _uiState.value.suministrosSeleccionados }
+            .filter { it.id in _uiState.value.suministrosSeleccionados.keys }
             .map { it.nombre }
             .toSet()
 
@@ -451,11 +414,10 @@ class NuevaVisitaViewModel @Inject constructor(
                     _uiState.update { it.copy(geminiState = GeminiUiState.Error("Sin respuesta de la IA")) }
                 }
             } catch (e: retrofit2.HttpException) {
-                val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull() ?: ""
                 val msg = when (e.code()) {
-                    429  -> "Cuota agotada. Espera un momento."
+                    429      -> "Cuota agotada. Espera un momento."
                     401, 403 -> "API Key inválida"
-                    else -> "Error HTTP ${e.code()}"
+                    else     -> "Error HTTP ${e.code()}"
                 }
                 _uiState.update { it.copy(geminiState = GeminiUiState.Error(msg)) }
             } catch (e: Exception) {

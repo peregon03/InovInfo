@@ -85,13 +85,9 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET /api/visitas/hoy
+// GET /api/visitas/hoy — todos ven todas las visitas del equipo de hoy
 router.get('/hoy', async (req, res) => {
     try {
-        const esCoordinadora = req.usuario.rol === 'coordinadora';
-        const tienePermiso   = req.usuario.permisos?.includes('VER_TODAS_VISITAS');
-        const verTodas       = esCoordinadora || tienePermiso;
-
         const query = `
             SELECT v.id, un.id AS unidad_id, un.numero AS unidad_numero, s.nombre AS sede_nombre,
                    s.id AS sede_id, ev.nombre AS estado, ev.color_hex, u2.nombre AS tecnico_nombre,
@@ -103,12 +99,10 @@ router.get('/hoy', async (req, res) => {
             JOIN estados_visita ev ON v.estado_id  = ev.id
             JOIN usuarios u2       ON v.tecnico_id = u2.id
             WHERE DATE(v.created_at AT TIME ZONE 'America/Bogota') = (NOW() AT TIME ZONE 'America/Bogota')::date
-            ${verTodas ? '' : 'AND v.tecnico_id = $1'}
             ORDER BY v.created_at DESC
         `;
 
-        const params = verTodas ? [] : [req.usuario.id];
-        const result = await pool.query(query, params);
+        const result = await pool.query(query, []);
         res.json(result.rows);
 
     } catch (err) {
@@ -116,13 +110,9 @@ router.get('/hoy', async (req, res) => {
     }
 });
 
-// GET /api/visitas/pendientes
+// GET /api/visitas/pendientes — todos ven todos los seguimientos pendientes del equipo
 router.get('/pendientes', async (req, res) => {
     try {
-        const esCoordinadora = req.usuario.rol === 'coordinadora';
-        const tienePermiso   = req.usuario.permisos?.includes('VER_TODAS_VISITAS');
-        const verTodas       = esCoordinadora || tienePermiso;
-
         const query = `
             SELECT v.id, un.id AS unidad_id, un.numero AS unidad_numero, s.nombre AS sede_nombre,
                    v.fecha_seguimiento, v.nota_seguimiento,
@@ -138,13 +128,35 @@ router.get('/pendientes', async (req, res) => {
             JOIN usuarios u2 ON v.tecnico_id = u2.id
             WHERE v.requiere_seguimiento = TRUE
               AND v.fecha_seguimiento IS NOT NULL
-            ${verTodas ? '' : 'AND v.tecnico_id = $1'}
             ORDER BY v.fecha_seguimiento ASC
         `;
 
-        const params = verTodas ? [] : [req.usuario.id];
-        const result = await pool.query(query, params);
+        const result = await pool.query(query, []);
         res.json(result.rows);
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/visitas/progreso — resumen de avance en N días (por defecto 15)
+router.get('/progreso', async (req, res) => {
+    try {
+        const dias = parseInt(req.query.dias, 10) || 15;
+
+        const visitadasRes = await pool.query(`
+            SELECT COUNT(DISTINCT unidad_id) AS visitadas
+            FROM visitas
+            WHERE created_at >= NOW() - ($1 || ' days')::interval
+        `, [dias]);
+
+        const totalRes = await pool.query('SELECT COUNT(*) AS total FROM unidades');
+
+        res.json({
+            visitadas: parseInt(visitadasRes.rows[0].visitadas, 10),
+            total:     parseInt(totalRes.rows[0].total, 10),
+            dias,
+        });
 
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -288,6 +300,41 @@ router.delete('/:id/fotos/:fotoId', async (req, res) => {
     } catch (err) {
         console.error('Error eliminando foto:', err.message);
         res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE /api/visitas/:id — solo coordinadora puede eliminar una visita
+router.delete('/:id', async (req, res) => {
+    if (req.usuario.rol !== 'coordinadora') {
+        return res.status(403).json({ error: 'Solo la coordinadora puede eliminar visitas' });
+    }
+
+    const visitaId = parseInt(req.params.id, 10);
+    const client   = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        await client.query('DELETE FROM visita_fotos       WHERE visita_id = $1', [visitaId]);
+        await client.query('DELETE FROM visita_suministros WHERE visita_id = $1', [visitaId]);
+
+        const deleteRes = await client.query(
+            'DELETE FROM visitas WHERE id = $1 RETURNING id',
+            [visitaId]
+        );
+
+        if (deleteRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Visita no encontrada' });
+        }
+
+        await client.query('COMMIT');
+        res.json({ mensaje: 'Visita eliminada' });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 });
 

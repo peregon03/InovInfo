@@ -176,6 +176,12 @@ data class InformeResponse(
     val totalVisitas:  Int
 )
 
+data class ProgresoResponse(
+    val visitadas: Int,
+    val total:     Int,
+    val dias:      Int
+)
+
 // ── Importación masiva desde Excel ────────────────────────────────────────────
 
 data class ImportarExcelResponse(
