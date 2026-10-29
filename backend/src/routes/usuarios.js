@@ -11,7 +11,7 @@ router.get('/', async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT u.id, u.nombre, u.email, u.rol, u.activo, u.created_at,
-                   COALESCE(json_agg(pu.permiso) FILTER (WHERE pu.permiso IS NOT NULL), '[]') AS permisos
+                   COALESCE(json_agg(pu.permiso) FILTER (WHERE pu.permiso IS NOT NULL), '[]'::json) AS permisos
             FROM usuarios u
             LEFT JOIN permisos_usuario pu ON u.id = pu.usuario_id
             GROUP BY u.id

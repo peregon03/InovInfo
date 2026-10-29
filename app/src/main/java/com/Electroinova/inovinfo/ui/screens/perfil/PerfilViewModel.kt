@@ -86,7 +86,8 @@ class PerfilViewModel @Inject constructor(
                 val lista = inovInfoApi.getUsuarios(sessionManager.bearerToken())
                 _uiState.update { it.copy(usuarios = lista, usuariosLoading = false) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(usuariosLoading = false) }
+                android.util.Log.e("PerfilVM", "Error cargando usuarios", e)
+                _uiState.update { it.copy(usuariosLoading = false, error = "Error cargando equipo: ${e.message}") }
             }
         }
     }
@@ -100,7 +101,8 @@ class PerfilViewModel @Inject constructor(
                 val unidades = inovInfoApi.getUnidades(token)
                 _uiState.update { it.copy(sedes = sedes, unidades = unidades, catalogosLoading = false) }
             } catch (e: Exception) {
-                _uiState.update { it.copy(catalogosLoading = false) }
+                android.util.Log.e("PerfilVM", "Error cargando catálogos", e)
+                _uiState.update { it.copy(catalogosLoading = false, error = "Error cargando catálogos: ${e.message}") }
             }
         }
     }
