@@ -6,11 +6,9 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user:     process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-});
-
-// Configurar zona horaria Colombia en cada conexión nueva
-pool.on('connect', (client) => {
-  client.query("SET timezone = 'America/Bogota'");
+  // Zona horaria Colombia configurada a nivel de conexión PostgreSQL
+  // (evita race condition del antiguo pool.on('connect') sin await)
+  options:  '-c timezone=America/Bogota',
 });
 
 pool.on('error', (err) => {

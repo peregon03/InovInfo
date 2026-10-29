@@ -19,6 +19,7 @@ router.get('/', async (req, res) => {
         `);
         res.json(result.rows);
     } catch (err) {
+        console.error('[USUARIOS ERROR]', err.message, err.stack);
         res.status(500).json({ error: err.message });
     }
 });
