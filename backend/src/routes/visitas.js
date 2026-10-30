@@ -23,20 +23,13 @@ router.use(verificarToken);
 // Query params opcionales: ?unidad_id=X para filtrar por unidad
 router.get('/', async (req, res) => {
     try {
-        const esCoordinadora  = req.usuario.rol === 'coordinadora';
-        const tienePermiso    = req.usuario.permisos?.includes('VER_TODAS_VISITAS');
-        const verTodas        = esCoordinadora || tienePermiso;
         const unidadId        = req.query.unidad_id ? parseInt(req.query.unidad_id, 10) : null;
 
-        // Construir filtros dinámicamente
+        // Todos los usuarios ven todas las visitas (operación centralizada)
         const condiciones = [];
         const params      = [];
         let paramIndex    = 1;
 
-        if (!verTodas) {
-            condiciones.push(`v.tecnico_id = $${paramIndex++}`);
-            params.push(req.usuario.id);
-        }
         if (unidadId) {
             condiciones.push(`v.unidad_id = $${paramIndex++}`);
             params.push(unidadId);
